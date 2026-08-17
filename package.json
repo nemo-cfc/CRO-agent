@@ -1,0 +1,29 @@
+{
+  "name": "cro-agent",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "concurrently -n worker,web -c cyan,magenta \"npm:dev:worker\" \"npm:dev:web\"",
+    "dev:worker": "npm run dev --workspace=@cro/worker",
+    "dev:web": "npm run dev --workspace=@cro/web",
+    "build": "npm run build --workspace=@cro/shared && npm run build --workspace=@cro/worker && npm run build --workspace=@cro/web",
+    "bench": "npm run bench --workspace=@cro/worker",
+    "test": "npm run test --workspace=@cro/worker",
+    "typecheck": "tsc -b"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2",
+    "typescript": "^5.7.3"
+  },
+  "allowScripts": {
+    "esbuild@0.28.2": true
+  }
+}

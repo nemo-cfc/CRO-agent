@@ -1,6 +1,10 @@
 # CRO Audit Agent
 
-Enter a website address. The agent loads the homepage **and** the highest-intent page it can find, on desktop and mobile, runs 47 conversion checks, and writes up what to change — streaming results as they land, with a hard 25-second deadline.
+Enter a website address. The agent works out what kind of site it is, loads the pages that matter, runs the conversion checks that apply, and writes up what to change — streaming results as they land, with a hard 25-second deadline.
+
+**On a store** (Shopify, WooCommerce, Magento, BigCommerce) it walks the funnel: **homepage → collection → product**. Each stage loses shoppers differently, and a homepage-only audit misses where the money actually goes. Product-page checks cover price visibility, the buy button, reviews, delivery and returns; collection-page checks cover grid prices, filtering, sorting and search.
+
+**Everywhere else** it audits the homepage plus the single highest-intent page it can find — pricing, booking, demo, signup.
 
 ## Why it is built this way
 
@@ -51,15 +55,15 @@ npm test
 
 ## Measured results
 
-Full 15-site corpus, `--no-llm`, warm pool:
+Full 17-site corpus (including two live Shopify stores), `--no-llm`, warm pool:
 
 | | p50 | p95 | max |
 |---|---|---|---|
-| Total (excl. model) | 4.4s | 13.5s | 13.5s |
-| Render phase | 3.5s | 13.2s | 13.2s |
-| First checks visible | 4.4s | 13.5s | 13.5s |
+| Total (excl. model) | 5.1s | 11.2s | 11.2s |
+| Render phase | 4.0s | 9.9s | 9.9s |
+| First checks visible | 5.1s | 11.2s | 11.2s |
 
-15/15 completed, none over the 25s deadline. End-to-end through the frontend, `therayog.com` returns a complete 47-check report in **8.0s**.
+17/17 completed, none over the 25s deadline. Individual stores: `allbirds.com` 8.3s / 64 checks, `discoverpilgrim.com` 11.7s / 60 checks — both auditing three pages.
 
 Two caveats that matter more than the headline numbers:
 
@@ -82,7 +86,15 @@ apps/web/              Next.js frontend, SSE consumer
 
 ## Design notes worth knowing
 
-**Key-page detection is a heuristic, not a model call.** Internal links are scored against weighted intent keywords (`checkout` 10, `pricing` 9, `product` 4…), penalised for depth, and filtered against a never-convert list (blog, privacy, careers). Takes about a millisecond. Returns nothing rather than guessing, in which case only the homepage is audited.
+**Page selection is a heuristic, not a model call.** On a store, collection and product URLs are matched against per-platform path shapes (`/collections/…` and `/products/…` on Shopify, `/product-category/…` and `/product/…` on WooCommerce) taken from the homepage link graph — both stores tested link all three from the homepage, so it usually resolves with no extra request. When a store merchandises only categories, one extra HTML fetch finds a product from the collection page. On non-store sites, internal links are scored against weighted intent keywords (`checkout` 10, `pricing` 9, `product` 4…), penalised for depth, and filtered against a never-convert list. Either way it returns nothing rather than guessing.
+
+**Platform markers are anchored, never substrings.** An early version used `mage/` for Magento and matched every Shopify store on the web, because `mage/` is inside `image/`. Detection now uses vendor hostnames, namespaced identifiers (`Magento_Catalog`, `data-mage-init`) and response headers (`x-shopid`), with a regression test pinning it.
+
+**Store pages are audited at mobile width only.** Three funnel pages at both widths is six concurrent Chromium renders, which measured 20s on a real store — enough to breach the 30s wall once the model call is added. The homepage keeps both widths; collection and product are mobile-only, which is where store traffic and store losses are, and which nearly every check reading those pages already preferred. Three pages at the width that matters beats two pages at both.
+
+**Tile prices are found structurally, not by class name.** Matching `[class*="card"]`/`[class*="tile"]` reported "0 of 13 tiles show a price" on a store whose grid plainly shows prices, because that theme uses neither word. It now walks up from each product link until the ancestor covers more than one product, which finds the tile boundary whatever it is called.
+
+**The product price is taken from structured data where it exists.** Picking the first currency string on the page reported one store's price as *"Spend $100 more to earn free shipping!"*. Detection now prefers the JSON-LD/meta price, requires a short leaf element, and rejects anything containing promo vocabulary.
 
 **The collector is one `page.evaluate`, not thirty `page.$eval` calls.** Each round trip is a CDP hop; the difference is roughly 50ms versus 2s.
 

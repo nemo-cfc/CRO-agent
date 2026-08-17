@@ -37,6 +37,16 @@ const EMPTY: CollectResult = {
     readingEase: null, avgSentenceWords: null, benefitHits: 0,
     featureHits: 0, jargonHits: 0, headlineHasNumber: false,
   },
+  ecommerce: {
+    priceVisible: false, priceAboveFold: false, priceText: null,
+    addToCartText: null, addToCartAboveFold: false,
+    addToCartWidth: 0, addToCartHeight: 0,
+    variantGroups: 0, stockText: null, galleryImages: 0,
+    reviewWidget: false, ratingText: null,
+    shippingInfo: false, returnsInfo: false, paymentIcons: 0,
+    productTiles: 0, tilesWithPrice: 0, hasFilters: false, hasSort: false,
+    cartLink: false, searchBox: false,
+  },
 };
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));

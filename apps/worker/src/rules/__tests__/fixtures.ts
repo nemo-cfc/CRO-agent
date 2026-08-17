@@ -54,6 +54,29 @@ export function page(overrides: Partial<PageEvidence> = {}): PageEvidence {
       wordCount: 620, readingEase: 68, avgSentenceWords: 14,
       benefitHits: 22, featureHits: 6, jargonHits: 0, headlineHasNumber: true,
     },
+    ecommerce: {
+      priceVisible: true,
+      priceAboveFold: true,
+      priceText: '£49.00',
+      addToCartText: 'Add to cart',
+      addToCartAboveFold: true,
+      addToCartWidth: 320,
+      addToCartHeight: 52,
+      variantGroups: 2,
+      stockText: 'In stock',
+      galleryImages: 6,
+      reviewWidget: true,
+      ratingText: '4.8 out of 5',
+      shippingInfo: true,
+      returnsInfo: true,
+      paymentIcons: 4,
+      productTiles: 24,
+      tilesWithPrice: 24,
+      hasFilters: true,
+      hasSort: true,
+      cartLink: true,
+      searchBox: true,
+    },
     screenshot: null,
   };
   return { ...base, ...overrides };
@@ -86,8 +109,15 @@ export function staticEvidence(overrides: Partial<StaticEvidence> = {}): StaticE
 export function healthyEvidence(overrides: Partial<AuditEvidence> = {}): AuditEvidence {
   const base: AuditEvidence = {
     url: 'https://example.com/',
-    keyPageUrl: 'https://example.com/pricing',
-    keyPageReason: 'Highest-intent internal page (pricing)',
+    platform: 'other',
+    targets: [
+      { url: 'https://example.com/', role: 'home', reason: 'Where most first-time visitors land' },
+      {
+        url: 'https://example.com/pricing',
+        role: 'keypage',
+        reason: 'Highest-intent internal page (pricing)',
+      },
+    ],
     static: staticEvidence(),
     crux: null,
     pages: [
@@ -95,6 +125,33 @@ export function healthyEvidence(overrides: Partial<AuditEvidence> = {}): AuditEv
       page({ role: 'home', viewport: 'mobile' }),
       page({ role: 'keypage', viewport: 'desktop', url: 'https://example.com/pricing', finalUrl: 'https://example.com/pricing' }),
       page({ role: 'keypage', viewport: 'mobile', url: 'https://example.com/pricing', finalUrl: 'https://example.com/pricing' }),
+    ],
+  };
+  return { ...base, ...overrides };
+}
+
+/** A healthy Shopify store: homepage, collection and product all in good shape. */
+export function healthyStoreEvidence(overrides: Partial<AuditEvidence> = {}): AuditEvidence {
+  const collectionUrl = 'https://shop.example.com/collections/bestsellers';
+  const productUrl = 'https://shop.example.com/products/thing';
+
+  const base: AuditEvidence = {
+    url: 'https://shop.example.com/',
+    platform: 'shopify',
+    targets: [
+      { url: 'https://shop.example.com/', role: 'home', reason: 'Where most first-time visitors land' },
+      { url: collectionUrl, role: 'collection', reason: 'Category page linked from the homepage' },
+      { url: productUrl, role: 'product', reason: 'Representative product page' },
+    ],
+    static: staticEvidence({ url: 'https://shop.example.com/', finalUrl: 'https://shop.example.com/' }),
+    crux: null,
+    pages: [
+      page({ role: 'home', viewport: 'desktop' }),
+      page({ role: 'home', viewport: 'mobile' }),
+      page({ role: 'collection', viewport: 'desktop', url: collectionUrl, finalUrl: collectionUrl }),
+      page({ role: 'collection', viewport: 'mobile', url: collectionUrl, finalUrl: collectionUrl }),
+      page({ role: 'product', viewport: 'desktop', url: productUrl, finalUrl: productUrl }),
+      page({ role: 'product', viewport: 'mobile', url: productUrl, finalUrl: productUrl }),
     ],
   };
   return { ...base, ...overrides };

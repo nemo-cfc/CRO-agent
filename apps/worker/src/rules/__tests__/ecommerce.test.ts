@@ -1,0 +1,187 @@
+import { describe, expect, it } from 'vitest';
+import { runRules } from '../index.js';
+import { detectPlatform, findProductInHtml, findStorePages } from '../../pipeline/platform.js';
+import { healthyEvidence, healthyStoreEvidence, page } from './fixtures.js';
+import type { Check, PageEvidence } from '@cro/shared';
+
+const byId = (checks: Check[], id: string): Check => {
+  const found = checks.find((c) => c.id === id);
+  if (!found) throw new Error(`no check with id ${id}`);
+  return found;
+};
+
+/** Replace one role's pages with a perturbed variant, keeping the rest healthy. */
+function withRole(role: PageEvidence['role'], overrides: Partial<PageEvidence>) {
+  const base = healthyStoreEvidence();
+  return {
+    ...base,
+    pages: base.pages.map((p) =>
+      p.role === role ? page({ ...p, ...overrides, role: p.role, viewport: p.viewport }) : p,
+    ),
+  };
+}
+
+describe('platform detection', () => {
+  it('identifies Shopify from asset hosts', () => {
+    expect(detectPlatform('<script src="https://cdn.shopify.com/s/files/x.js">')).toBe('shopify');
+    expect(detectPlatform('<img src="/cdn/shop/files/hero.png">')).toBe('shopify');
+  });
+
+  it('does not mistake "image/" for Magento', () => {
+    // A naive `mage/` marker matched every site on the web that serves an
+    // image, including every Shopify store. This is that regression.
+    const html = '<img src="/assets/image/hero.png"><script src="https://cdn.shopify.com/x.js">';
+    expect(detectPlatform(html)).toBe('shopify');
+    expect(detectPlatform('<img src="/media/image/photo.jpg">')).toBe('other');
+  });
+
+  it('identifies Magento only from namespaced markers', () => {
+    expect(detectPlatform('<div data-mage-init=\'{"catalog":{}}\'>')).toBe('magento');
+    expect(detectPlatform('<script src="/static/version1699/frontend/x.js">')).toBe('magento');
+  });
+
+  it('prefers WooCommerce over plain WordPress', () => {
+    const html = '<link href="/wp-content/plugins/woocommerce/assets/css/woocommerce.css">';
+    expect(detectPlatform(html)).toBe('woocommerce');
+    expect(detectPlatform('<link href="/wp-content/themes/twentytwenty/style.css">')).toBe(
+      'wordpress',
+    );
+  });
+
+  it('trusts response headers over markup', () => {
+    const headers = new Headers({ 'x-shopid': '12345' });
+    expect(detectPlatform('<html>nothing identifying here</html>', headers)).toBe('shopify');
+  });
+
+  it('returns "other" for an ordinary site', () => {
+    expect(detectPlatform('<html><body><h1>A blog</h1></body></html>')).toBe('other');
+  });
+});
+
+describe('store page selection', () => {
+  const links = [
+    { href: 'https://s.com/collections/all', text: 'All' },
+    { href: 'https://s.com/collections/bestsellers', text: 'Best sellers' },
+    { href: 'https://s.com/collections/face-care', text: 'Face care' },
+    { href: 'https://s.com/products/vitamin-c-serum', text: 'Vitamin C Serum' },
+    { href: 'https://s.com/cart', text: 'Cart' },
+    { href: 'https://s.com/pages/about', text: 'About' },
+  ];
+
+  it('picks one collection and one product', () => {
+    const found = findStorePages('shopify', links);
+    expect(found.collection).toBe('https://s.com/collections/bestsellers');
+    expect(found.product).toBe('https://s.com/products/vitamin-c-serum');
+  });
+
+  it('skips /collections/all, which says nothing about merchandising', () => {
+    expect(findStorePages('shopify', links).collection).not.toContain('/collections/all');
+  });
+
+  it('never treats the cart as a product page', () => {
+    const found = findStorePages('shopify', [{ href: 'https://s.com/cart', text: 'Cart' }]);
+    expect(found.product).toBeNull();
+  });
+
+  it('recognises WooCommerce URL shapes', () => {
+    const found = findStorePages('woocommerce', [
+      { href: 'https://s.com/product-category/shoes/', text: 'Shoes' },
+      { href: 'https://s.com/product/blue-trainer/', text: 'Blue Trainer' },
+    ]);
+    expect(found.collection).toContain('/product-category/shoes');
+    expect(found.product).toContain('/product/blue-trainer');
+  });
+
+  it('falls back to schema.org when URL shape is unreliable', () => {
+    // Magento URLs are merchant-configurable, so the pattern match fails and
+    // the structured data has to carry it.
+    const html = `<script type="application/ld+json">
+      {"@type":"Product","name":"Chair","url":"https://s.com/office-chair.html"}
+    </script>`;
+    expect(findProductInHtml('magento', html, 'https://s.com/')).toBe(
+      'https://s.com/office-chair.html',
+    );
+  });
+});
+
+describe('store checks', () => {
+  it('passes a well-built store', () => {
+    const { checks } = runRules(healthyStoreEvidence());
+    const ecom = checks.filter((c) => c.category === 'ecommerce');
+    expect(ecom.length).toBeGreaterThan(10);
+    expect(ecom.filter((c) => c.status === 'fail')).toEqual([]);
+  });
+
+  it('is skipped entirely on a site that does not sell anything', () => {
+    const { checks, scorecard } = runRules(healthyEvidence());
+    const ecom = checks.filter((c) => c.category === 'ecommerce');
+    expect(ecom.every((c) => c.status === 'na')).toBe(true);
+    // Skipped, not passed — it must not inflate the score of a non-store.
+    expect(scorecard.categories.find((c) => c.category === 'ecommerce')?.applicable).toBe(0);
+  });
+
+  it('fails a product page with the buy button below the fold', () => {
+    const ev = withRole('product', { ecommerce: { ...page().ecommerce, addToCartAboveFold: false } });
+    expect(byId(runRules(ev).checks, 'ecommerce.addToCart').status).toBe('warn');
+  });
+
+  it('fails a product page with no buy button at all', () => {
+    const ev = withRole('product', {
+      ecommerce: { ...page().ecommerce, addToCartText: null, addToCartAboveFold: false },
+    });
+    expect(byId(runRules(ev).checks, 'ecommerce.addToCart').status).toBe('fail');
+  });
+
+  it('fails a product page with no price', () => {
+    const ev = withRole('product', {
+      ecommerce: { ...page().ecommerce, priceVisible: false, priceAboveFold: false, priceText: null },
+    });
+    expect(byId(runRules(ev).checks, 'ecommerce.price').status).toBe('fail');
+  });
+
+  it('fails a product page with no reviews', () => {
+    const ev = withRole('product', {
+      ecommerce: { ...page().ecommerce, reviewWidget: false, ratingText: null },
+    });
+    expect(byId(runRules(ev).checks, 'ecommerce.socialProof').status).toBe('fail');
+  });
+
+  it('flags missing shipping and returns information', () => {
+    const ev = withRole('product', {
+      ecommerce: { ...page().ecommerce, shippingInfo: false, returnsInfo: false },
+    });
+    expect(byId(runRules(ev).checks, 'ecommerce.deliveryTerms').status).toBe('fail');
+  });
+
+  it('fails a collection grid with no prices', () => {
+    const ev = withRole('collection', {
+      ecommerce: { ...page().ecommerce, productTiles: 24, tilesWithPrice: 0 },
+    });
+    expect(byId(runRules(ev).checks, 'ecommerce.tilePrices').status).toBe('fail');
+  });
+
+  it('flags a collection page with no filters or sorting', () => {
+    const ev = withRole('collection', {
+      ecommerce: { ...page().ecommerce, hasFilters: false, hasSort: false },
+    });
+    expect(byId(runRules(ev).checks, 'ecommerce.browseTools').status).toBe('fail');
+  });
+
+  it('scopes each finding to the page it came from', () => {
+    const { checks } = runRules(healthyStoreEvidence());
+    expect(byId(checks, 'ecommerce.addToCart').scope).toBe('product');
+    expect(byId(checks, 'ecommerce.browseTools').scope).toBe('collection');
+  });
+
+  it('skips product checks but keeps collection checks when no product was found', () => {
+    const base = healthyStoreEvidence();
+    const ev = {
+      ...base,
+      targets: base.targets.filter((t) => t.role !== 'product'),
+      pages: base.pages.filter((p) => p.role !== 'product'),
+    };
+    const { checks } = runRules(ev);
+    expect(byId(checks, 'ecommerce.productPage').status).toBe('na');
+    expect(byId(checks, 'ecommerce.browseTools').status).toBe('pass');
+  });
+});

@@ -15,6 +15,7 @@ export const CATEGORIES = [
   'technical',
   'tracking',
   'friction',
+  'ecommerce',
 ] as const;
 
 export const CategorySchema = z.enum(CATEGORIES);
@@ -31,6 +32,7 @@ export const CATEGORY_LABELS: Record<Category, string> = {
   technical: 'Technical foundations',
   tracking: 'Measurement',
   friction: 'Interruptions',
+  ecommerce: 'Shopping experience',
 };
 
 /** Relative weight of each category in the overall score. Tune here, not in check logic. */
@@ -45,7 +47,45 @@ export const CATEGORY_WEIGHTS: Record<Category, number> = {
   technical: 0.75,
   tracking: 0.75,
   friction: 1.0,
+  // Weighted highest on a store, because these checks sit directly on the
+  // path to a purchase. Scores nothing on a non-commerce site, where the
+  // whole category is skipped rather than counted as a free pass.
+  ecommerce: 1.75,
 };
+
+/* ------------------------------------------------------------------ *
+ * Platform
+ * ------------------------------------------------------------------ */
+
+export const PlatformSchema = z.enum([
+  'shopify',
+  'woocommerce',
+  'magento',
+  'bigcommerce',
+  'wordpress',
+  'other',
+]);
+export type Platform = z.infer<typeof PlatformSchema>;
+
+export const ECOMMERCE_PLATFORMS: Platform[] = [
+  'shopify',
+  'woocommerce',
+  'magento',
+  'bigcommerce',
+];
+
+export const PLATFORM_LABELS: Record<Platform, string> = {
+  shopify: 'Shopify',
+  woocommerce: 'WooCommerce',
+  magento: 'Magento',
+  bigcommerce: 'BigCommerce',
+  wordpress: 'WordPress',
+  other: 'Unknown platform',
+};
+
+export function isStore(platform: Platform | null | undefined): boolean {
+  return !!platform && ECOMMERCE_PLATFORMS.includes(platform);
+}
 
 /* ------------------------------------------------------------------ *
  * Checks
@@ -64,8 +104,8 @@ export const CheckSchema = z.object({
   weight: z.number().min(0).max(3),
   /** Short factual statement of what was measured. Shown in the UI. */
   detail: z.string(),
-  /** Which page/viewport produced this. */
-  scope: z.enum(['home', 'keypage', 'site']).default('home'),
+  /** Which page produced this. */
+  scope: z.enum(['home', 'keypage', 'collection', 'product', 'site']).default('home'),
   /** Raw measured values, for the report and for the model's evidence packet. */
   evidence: z.record(z.union([z.string(), z.number(), z.boolean(), z.null()])).default({}),
 });
@@ -95,8 +135,19 @@ export type Scorecard = z.infer<typeof ScorecardSchema>;
 export const ViewportSchema = z.enum(['desktop', 'mobile']);
 export type Viewport = z.infer<typeof ViewportSchema>;
 
-export const PageRoleSchema = z.enum(['home', 'keypage']);
+/**
+ * `keypage` is the generic highest-intent page used on non-store sites.
+ * Stores get the funnel instead: home → collection → product.
+ */
+export const PageRoleSchema = z.enum(['home', 'keypage', 'collection', 'product']);
 export type PageRole = z.infer<typeof PageRoleSchema>;
+
+export const ROLE_LABELS: Record<PageRole, string> = {
+  home: 'Homepage',
+  keypage: 'Key page',
+  collection: 'Collection page',
+  product: 'Product page',
+};
 
 export const CtaCandidateSchema = z.object({
   text: z.string(),
@@ -212,6 +263,39 @@ export const CopyEvidenceSchema = z.object({
 });
 export type CopyEvidence = z.infer<typeof CopyEvidenceSchema>;
 
+/**
+ * Shopping signals. Populated on every page, but only scored on the roles
+ * where each field means something — a missing Add to cart is a finding on a
+ * product page and noise on a homepage.
+ */
+export const EcommerceEvidenceSchema = z.object({
+  /* product-page signals */
+  priceVisible: z.boolean(),
+  priceAboveFold: z.boolean(),
+  priceText: z.string().nullable(),
+  addToCartText: z.string().nullable(),
+  addToCartAboveFold: z.boolean(),
+  addToCartWidth: z.number(),
+  addToCartHeight: z.number(),
+  variantGroups: z.number().int(),
+  stockText: z.string().nullable(),
+  galleryImages: z.number().int(),
+  reviewWidget: z.boolean(),
+  ratingText: z.string().nullable(),
+  shippingInfo: z.boolean(),
+  returnsInfo: z.boolean(),
+  paymentIcons: z.number().int(),
+  /* collection-page signals */
+  productTiles: z.number().int(),
+  tilesWithPrice: z.number().int(),
+  hasFilters: z.boolean(),
+  hasSort: z.boolean(),
+  /* site-wide */
+  cartLink: z.boolean(),
+  searchBox: z.boolean(),
+});
+export type EcommerceEvidence = z.infer<typeof EcommerceEvidenceSchema>;
+
 /** Everything one `page.evaluate` returns for a single page at a single viewport. */
 export const PageEvidenceSchema = z.object({
   url: z.string(),
@@ -231,6 +315,7 @@ export const PageEvidenceSchema = z.object({
   friction: FrictionEvidenceSchema,
   tracking: TrackingEvidenceSchema,
   copy: CopyEvidenceSchema,
+  ecommerce: EcommerceEvidenceSchema,
   screenshot: z.string().nullable(),
 });
 export type PageEvidence = z.infer<typeof PageEvidenceSchema>;
@@ -269,10 +354,18 @@ export const CruxEvidenceSchema = z.object({
 });
 export type CruxEvidence = z.infer<typeof CruxEvidenceSchema>;
 
+/** One page the audit decided to load, and why. */
+export const AuditTargetSchema = z.object({
+  url: z.string(),
+  role: PageRoleSchema,
+  reason: z.string(),
+});
+export type AuditTarget = z.infer<typeof AuditTargetSchema>;
+
 export const AuditEvidenceSchema = z.object({
   url: z.string(),
-  keyPageUrl: z.string().nullable(),
-  keyPageReason: z.string().nullable(),
+  platform: PlatformSchema,
+  targets: z.array(AuditTargetSchema),
   static: StaticEvidenceSchema.nullable(),
   crux: CruxEvidenceSchema.nullable(),
   pages: z.array(PageEvidenceSchema),
@@ -331,8 +424,8 @@ export const AuditEventSchema = z.discriminatedUnion('type', [
     finalUrl: z.string(),
     title: z.string().nullable(),
     description: z.string().nullable(),
-    keyPageUrl: z.string().nullable(),
-    keyPageReason: z.string().nullable(),
+    platform: PlatformSchema,
+    targets: z.array(AuditTargetSchema),
     generator: z.string().nullable(),
     tracking: TrackingEvidenceSchema.nullable(),
     at: z.number(),

@@ -1,11 +1,21 @@
 'use client';
 
 import { useState } from 'react';
+import { PLATFORM_LABELS, ROLE_LABELS, isStore } from '@cro/shared';
 import { useAuditStream } from '@/lib/useAuditStream';
 import { ProgressRail } from './components/ProgressRail';
 import { Scorecard } from './components/Scorecard';
 import { ChecksPanel } from './components/ChecksPanel';
 import { Recommendations } from './components/Recommendations';
+
+function pathOf(url: string): string {
+  try {
+    const u = new URL(url);
+    return u.pathname === '/' ? u.hostname : u.pathname;
+  } catch {
+    return url;
+  }
+}
 
 export default function Home() {
   const [input, setInput] = useState('');
@@ -59,7 +69,12 @@ export default function Home() {
 
       {(state.url || state.title) && (
         <section className="panel">
-          <h2>Audited</h2>
+          <h2>
+            Audited
+            {state.platform && isStore(state.platform) && (
+              <span className="platformTag">{PLATFORM_LABELS[state.platform]} store</span>
+            )}
+          </h2>
           <div className="meta">
             {state.title && (
               <span>
@@ -73,22 +88,25 @@ export default function Home() {
                 </a>
               </span>
             )}
-            {state.platform && (
+            {state.generator && (
               <span>
-                built with <b>{state.platform}</b>
+                built with <b>{state.generator}</b>
               </span>
             )}
           </div>
-          {state.keyPageUrl && (
-            <div className="meta" style={{ marginTop: 8 }}>
-              <span>
-                second page —{' '}
-                <a href={state.keyPageUrl} target="_blank" rel="noreferrer noopener">
-                  {new URL(state.keyPageUrl).pathname}
-                </a>{' '}
-                <span style={{ color: 'var(--dim)' }}>({state.keyPageReason})</span>
-              </span>
-            </div>
+
+          {state.targets.length > 0 && (
+            <ol className="targets">
+              {state.targets.map((t) => (
+                <li key={t.url + t.role}>
+                  <span className={`roleTag ${t.role}`}>{ROLE_LABELS[t.role]}</span>
+                  <a href={t.url} target="_blank" rel="noreferrer noopener">
+                    {pathOf(t.url)}
+                  </a>
+                  <span className="why">{t.reason}</span>
+                </li>
+              ))}
+            </ol>
           )}
         </section>
       )}
@@ -100,7 +118,7 @@ export default function Home() {
             {state.shots.map((s) => (
               <figure className="shot" key={`${s.role}-${s.viewport}`}>
                 <figcaption>
-                  {s.role === 'home' ? 'Homepage' : 'Key page'} · {s.viewport}
+                  {ROLE_LABELS[s.role]} · {s.viewport}
                 </figcaption>
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src={s.dataUri} alt={`${s.role} at ${s.viewport} width`} />

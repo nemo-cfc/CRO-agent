@@ -1,6 +1,7 @@
 import * as cheerio from 'cheerio';
-import type { StaticEvidence, TrackingEvidence } from '@cro/shared';
+import type { Platform, StaticEvidence, TrackingEvidence } from '@cro/shared';
 import { config } from '../config.js';
+import { detectPlatform } from './platform.js';
 
 const GENERATOR_HINTS: [RegExp, string][] = [
   [/wp-content|wp-includes/i, 'WordPress'],
@@ -25,7 +26,11 @@ const GENERATOR_HINTS: [RegExp, string][] = [
 export async function fetchStatic(
   url: string,
   signal: AbortSignal,
-): Promise<{ evidence: StaticEvidence; trackingFromHtml: Partial<TrackingEvidence> } | null> {
+): Promise<{
+  evidence: StaticEvidence;
+  trackingFromHtml: Partial<TrackingEvidence>;
+  platform: Platform;
+} | null> {
   const controller = new AbortController();
   const onAbort = () => controller.abort();
   signal.addEventListener('abort', onAbort, { once: true });
@@ -141,7 +146,11 @@ export async function fetchStatic(
       ttfbMs,
     };
 
-    return { evidence, trackingFromHtml };
+    // Response headers are the strongest platform signal available and are
+    // free here — a theme can hide its markup, but not x-shopid.
+    const platform = detectPlatform(html, res.headers);
+
+    return { evidence, trackingFromHtml, platform };
   } catch {
     return null;
   } finally {

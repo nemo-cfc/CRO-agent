@@ -3,9 +3,11 @@
 import { useCallback, useRef, useState } from 'react';
 import type {
   AuditEvent,
+  AuditTarget,
   Check,
   PageRole,
   Phase,
+  Platform,
   Recommendation,
   Scorecard,
   Viewport,
@@ -26,9 +28,9 @@ export interface ReportState {
   phaseLabel: string;
   url: string | null;
   title: string | null;
-  keyPageUrl: string | null;
-  keyPageReason: string | null;
-  platform: string | null;
+  targets: AuditTarget[];
+  platform: Platform | null;
+  generator: string | null;
   checks: Check[];
   scorecard: Scorecard | null;
   shots: Shot[];
@@ -47,9 +49,9 @@ const EMPTY: ReportState = {
   phaseLabel: '',
   url: null,
   title: null,
-  keyPageUrl: null,
-  keyPageReason: null,
+  targets: [],
   platform: null,
+  generator: null,
   checks: [],
   scorecard: null,
   shots: [],
@@ -167,9 +169,9 @@ function reduce(s: ReportState, e: AuditEvent): ReportState {
         ...s,
         url: e.finalUrl,
         title: e.title,
-        keyPageUrl: e.keyPageUrl,
-        keyPageReason: e.keyPageReason,
-        platform: e.generator,
+        targets: e.targets,
+        platform: e.platform,
+        generator: e.generator,
       };
     case 'checks':
       return { ...s, checks: e.checks, scorecard: e.scorecard };

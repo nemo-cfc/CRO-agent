@@ -18,12 +18,17 @@ export function buildContext(evidence: AuditEvidence): RuleContext {
   const homeDesktop = find('home', 'desktop');
   const homeMobile = find('home', 'mobile');
 
+  // "The other page we audited" — the generic key page on a normal site, or
+  // the product page on a store, since that is where the decision is made.
+  const secondary = (vp: 'desktop' | 'mobile') =>
+    find('keypage', vp) ?? find('product', vp) ?? find('collection', vp);
+
   return {
     evidence,
     homeDesktop,
     homeMobile,
-    keyDesktop: find('keypage', 'desktop'),
-    keyMobile: find('keypage', 'mobile'),
+    keyDesktop: secondary('desktop'),
+    keyMobile: secondary('mobile'),
     home: homeDesktop ?? homeMobile,
   };
 }

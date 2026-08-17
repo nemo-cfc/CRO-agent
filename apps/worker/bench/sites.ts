@@ -16,6 +16,10 @@ export interface BenchSite {
 }
 
 export const SITES: BenchSite[] = [
+  // Stores audit three pages instead of two, so they are the worst case for
+  // the budget and belong in the corpus rather than being tested by hand.
+  { url: 'https://discoverpilgrim.com', shape: 'shopify, image-heavy' },
+  { url: 'https://www.allbirds.com', shape: 'shopify, spa-ish' },
   { url: 'https://therayog.com', shape: 'wordpress, image-heavy' },
   { url: 'https://vercel.com', shape: 'next.js, marketing' },
   { url: 'https://stripe.com', shape: 'spa, heavy js' },

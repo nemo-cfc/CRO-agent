@@ -1,11 +1,12 @@
 import type { AuditEvent, AuditEvidence, PageEvidence, TrackingEvidence } from '@cro/shared';
+import { PLATFORM_LABELS, isStore } from '@cro/shared';
 import { config } from '../config.js';
 import { collectPage } from '../browser/collect.js';
 import { runRules } from '../rules/index.js';
 import { writeRecommendations } from '../llm/recommend.js';
 import { fetchStatic } from './static.js';
 import { fetchCrux } from './crux.js';
-import { pickKeyPage } from './keypage.js';
+import { pickTargets } from './targets.js';
 
 export type Emit = (event: AuditEvent) => void;
 
@@ -36,7 +37,18 @@ export async function runAudit(url: string, emit: Emit): Promise<void> {
     if (!staticResult) notes.push('The raw HTML could not be fetched; some technical checks were skipped.');
 
     const staticEvidence = staticResult?.evidence ?? null;
-    const keyPage = pickKeyPage(staticEvidence?.finalUrl ?? url, staticEvidence);
+    const platform = staticResult?.platform ?? 'other';
+
+    // On a store this walks the funnel — homepage, collection, product —
+    // because each stage loses shoppers differently. Elsewhere it resolves to
+    // the single highest-intent page.
+    const { targets, notes: targetNotes } = await pickTargets(
+      staticEvidence?.finalUrl ?? url,
+      platform,
+      staticEvidence,
+      signal,
+    );
+    notes.push(...targetNotes);
 
     emit({
       type: 'meta',
@@ -44,8 +56,8 @@ export async function runAudit(url: string, emit: Emit): Promise<void> {
       finalUrl: staticEvidence?.finalUrl ?? url,
       title: staticEvidence?.title ?? null,
       description: staticEvidence?.metaDescription ?? null,
-      keyPageUrl: keyPage?.url ?? null,
-      keyPageReason: keyPage?.reason ?? null,
+      platform,
+      targets,
       generator: staticEvidence?.generator ?? null,
       tracking: null,
       at: at(),
@@ -57,21 +69,43 @@ export async function runAudit(url: string, emit: Emit): Promise<void> {
      * home view and the mobile home view only; two are enough for the
      * report and each one costs real milliseconds.
      * -------------------------------------------------------------- */
-    phase('rendering', keyPage ? 'Loading both pages on desktop and mobile' : 'Loading the page on desktop and mobile');
+    phase(
+      'rendering',
+      isStore(platform)
+        ? `Loading ${targets.length} ${PLATFORM_LABELS[platform]} pages on desktop and mobile`
+        : `Loading ${targets.length === 1 ? 'the page' : 'both pages'} on desktop and mobile`,
+    );
 
-    const targets: { url: string; role: 'home' | 'keypage'; viewport: 'desktop' | 'mobile'; screenshot: boolean }[] = [
-      { url, role: 'home', viewport: 'desktop', screenshot: true },
-      { url, role: 'home', viewport: 'mobile', screenshot: true },
-    ];
-    if (keyPage) {
-      targets.push(
-        { url: keyPage.url, role: 'keypage', viewport: 'desktop', screenshot: false },
-        { url: keyPage.url, role: 'keypage', viewport: 'mobile', screenshot: true },
-      );
-    }
+    // Viewports per role, and this is a budget decision worth being explicit
+    // about. Loading three funnel pages at both widths means six concurrent
+    // Chromium renders, which measured 20s on a real store — enough to breach
+    // the 30s wall once the model call is added.
+    //
+    // The homepage keeps both widths because layout differences there are
+    // material and the desktop screenshot is what makes the report
+    // recognisable. Collection and product pages are mobile-only: nearly every
+    // check that reads them already prefers the mobile view, and on a store
+    // mobile is where the traffic and the losses are. Better to audit three
+    // pages honestly at the width that matters than two pages at both.
+    const VIEWPORTS: Record<typeof targets[number]['role'], readonly ('desktop' | 'mobile')[]> = {
+      home: ['desktop', 'mobile'],
+      keypage: ['desktop', 'mobile'],
+      collection: ['mobile'],
+      product: ['mobile'],
+    };
+
+    const loads = targets.flatMap((t) =>
+      VIEWPORTS[t.role].map((viewport) => ({
+        url: t.url,
+        role: t.role,
+        viewport,
+        // One screenshot per page: mobile everywhere, plus desktop home.
+        screenshot: viewport === 'mobile' || t.role === 'home',
+      })),
+    );
 
     const pages: PageEvidence[] = await Promise.all(
-      targets.map((t) =>
+      loads.map((t) =>
         collectPage({ ...t, signal }).then((page) => {
           // Push each screenshot the moment its page finishes rather than
           // waiting for the slowest of the four.
@@ -133,8 +167,8 @@ export async function runAudit(url: string, emit: Emit): Promise<void> {
 
     const evidence: AuditEvidence = {
       url,
-      keyPageUrl: keyPage?.url ?? null,
-      keyPageReason: keyPage?.reason ?? null,
+      platform,
+      targets,
       static: staticEvidence,
       crux,
       // Screenshots already went out over the wire; drop them from the
@@ -148,8 +182,8 @@ export async function runAudit(url: string, emit: Emit): Promise<void> {
       finalUrl: staticEvidence?.finalUrl ?? loaded[0]?.finalUrl ?? url,
       title: staticEvidence?.title ?? null,
       description: staticEvidence?.metaDescription ?? null,
-      keyPageUrl: keyPage?.url ?? null,
-      keyPageReason: keyPage?.reason ?? null,
+      platform,
+      targets,
       generator: staticEvidence?.generator ?? null,
       tracking,
       at: at(),

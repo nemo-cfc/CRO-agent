@@ -10,6 +10,7 @@ import { copyRules } from './copy.js';
 import { technicalRules } from './technical.js';
 import { trackingRules } from './tracking.js';
 import { frictionRules } from './friction.js';
+import { ecommerceRules } from './ecommerce.js';
 import { scoreChecks } from './score.js';
 
 const RULES = [
@@ -23,6 +24,7 @@ const RULES = [
   technicalRules,
   trackingRules,
   frictionRules,
+  ecommerceRules,
 ];
 
 /**

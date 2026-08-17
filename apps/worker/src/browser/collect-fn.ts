@@ -454,6 +454,199 @@ export function collectFn(): CollectResult {
   const JARGON = /\b(leverage|synerg\w*|holistic|robust|seamless|cutting-edge|best-in-class|world-class|innovative|paradigm|ecosystem|empower|streamline|revolutioni\w*|disrupt\w*|next-generation|state-of-the-art|turnkey|scalable|bespoke|curated|unlock)\b/gi;
 
   /* ---------------------------------------------------------------- *
+   * Shopping signals
+   *
+   * Gathered on every page; the rule engine decides which of them mean
+   * anything for the role the page was loaded as.
+   * ---------------------------------------------------------------- */
+
+  const CURRENCY = /(?:[$£€¥₹]|\bRs\.?|\bUSD|\bEUR|\bGBP|\bINR)\s?\d[\d.,]*/;
+  const ADD_TO_CART = /add to (cart|bag|basket)|buy (it )?now|add to my|shop now — buy/i;
+
+  /**
+   * Currency strings that are not the product's price.
+   *
+   * A first pass took the first element containing a currency amount and
+   * happily reported a store's price as "Spend $100 more to earn free
+   * shipping!" — a promo bar that happens to sit above the product. Anything
+   * with this phrasing is marketing, not the price.
+   */
+  // Words that never appear in a price display but are common in the promo
+  // bars that sit near one. "free shipping" alone was not enough — it missed
+  // "Free ground shipping on orders over $100"; matching on `shipping`,
+  // `order` and `over` independently covers the variants.
+  const PROMO =
+    /\b(spend|save|earn|off|shipping|delivery|orders?|over|under|more|discount|coupon|code|was|rrp|starting|minimum|threshold|reward|gift|when you)\b/i;
+
+  /** The authoritative price, when the page publishes structured data. */
+  const structuredPrice = (): string | null => {
+    for (const node of Array.from(
+      document.querySelectorAll<HTMLElement>('script[type="application/ld+json"]'),
+    )) {
+      const m = node.textContent?.match(/"price"\s*:\s*"?([\d.,]+)"?/);
+      if (m?.[1]) return m[1];
+    }
+    const meta = document.querySelector<HTMLMetaElement>(
+      'meta[property="product:price:amount"], meta[itemprop="price"]',
+    );
+    return meta?.content ?? null;
+  };
+
+  const declared = structuredPrice();
+
+  const priceCandidates = Array.from(
+    document.querySelectorAll<HTMLElement>(
+      '[itemprop="price"], [data-price], [class*="price" i], [class*="Price"], .money, span, p, strong, b, div',
+    ),
+  ).filter((el) => {
+    if (!visible(el)) return false;
+    const t = text(el);
+    // The price element is a short string that is mostly the number itself;
+    // a paragraph containing a price is prose, not a price display.
+    if (t.length === 0 || t.length > 40) return false;
+    if (!CURRENCY.test(t)) return false;
+    if (PROMO.test(t)) return false;
+    // Leaf-ish only, so a wrapper does not win over the element that renders it.
+    return el.querySelectorAll('*').length <= 2;
+  });
+
+  // Prefer the element showing the price the page itself declared, then an
+  // element explicitly marked up as a price, then the first plausible one.
+  const priceNode =
+    (declared
+      ? priceCandidates.find((el) => text(el).replace(/[^\d.,]/g, '').includes(declared.replace(/[^\d.,]/g, '')))
+      : null) ??
+    priceCandidates.find(
+      (el) => el.hasAttribute('itemprop') || el.hasAttribute('data-price') || /price|money/i.test(el.className?.toString() ?? ''),
+    ) ??
+    priceCandidates[0] ??
+    null;
+
+  const priceRect = priceNode?.getBoundingClientRect();
+
+  const cartBtn = ctaNodes.find((el) => {
+    const label = text(el) || el.getAttribute('aria-label') || (el as HTMLInputElement).value || '';
+    return ADD_TO_CART.test(label);
+  });
+  const cartRect = cartBtn?.getBoundingClientRect();
+
+  // Variant pickers: a select, or a group of swatch/size buttons. Counted as
+  // groups rather than options, since "3 choices to make" is the friction.
+  const variantGroups =
+    document.querySelectorAll('select[name*="option" i], select[id*="option" i], select[name*="variant" i]').length +
+    Array.from(
+      document.querySelectorAll('[class*="swatch" i], [class*="variant" i], [class*="option" i]'),
+    ).filter((el) => visible(el) && el.querySelectorAll('input, button, label').length >= 2).length;
+
+  const stockMatch = allTextForCommerce().match(
+    /\b(in stock|out of stock|sold out|only \d+ left|low stock|back ?order|pre-?order)\b/i,
+  );
+
+  const galleryImages = Array.from(
+    document.querySelectorAll('[class*="gallery" i] img, [class*="product" i] img, [class*="media" i] img'),
+  ).filter(visible).length;
+
+  const reviewWidget = !!document.querySelector(
+    '[class*="review" i], [class*="rating" i], [class*="stars" i], [data-reviews], [id*="judgeme" i], [class*="yotpo" i], [class*="stamped" i], [class*="okendo" i], [class*="loox" i]',
+  );
+
+  const ratingMatch = allTextForCommerce().match(
+    /(\d(?:\.\d)?)\s*(?:out of\s*5|\/\s*5|stars?)|(\d[\d,]*)\s*(?:reviews?|ratings?)/i,
+  );
+
+  // One representative link per product.
+  const productLinks = new Map<string, HTMLAnchorElement>();
+  for (const a of Array.from(document.querySelectorAll<HTMLAnchorElement>('a[href]'))) {
+    const href = a.getAttribute('href') ?? '';
+    if (!/\/products?\//i.test(href) || !visible(a)) continue;
+    if (!productLinks.has(href)) productLinks.set(href, a);
+  }
+
+  /**
+   * Whether a product tile shows its price, determined structurally rather
+   * than by guessing class names.
+   *
+   * Matching on `[class*="card"]`/`[class*="tile"]` looked reasonable and was
+   * wrong: it reported "0 of 13 tiles show a price" on a store whose grid
+   * plainly shows prices, because that theme uses none of those words. Walking
+   * up from the link until the ancestor covers more than one product finds the
+   * tile boundary whatever it happens to be called.
+   */
+  const tilesWithPrice = Array.from(productLinks.values()).filter((a) => {
+    let node: HTMLElement | null = a;
+    for (let depth = 0; depth < 6 && node; depth++) {
+      node = node.parentElement;
+      if (!node) break;
+      const hrefs = new Set(
+        Array.from(node.querySelectorAll<HTMLAnchorElement>('a[href]'))
+          .map((l) => l.getAttribute('href') ?? '')
+          .filter((h) => /\/products?\//i.test(h)),
+      );
+      // Left this tile and entered the grid — stop before every product
+      // inherits every other product's price.
+      if (hrefs.size > 1) break;
+      if (CURRENCY.test(text(node))) return true;
+    }
+    return false;
+  }).length;
+
+
+
+  const hasFilters = !!document.querySelector(
+    '[class*="filter" i], [class*="facet" i], [id*="filter" i], [aria-label*="filter" i], details[class*="filter" i]',
+  );
+  const hasSort = !!document.querySelector(
+    'select[class*="sort" i], select[name*="sort" i], [class*="sort-by" i], [aria-label*="sort" i]',
+  );
+
+  const paymentIcons = Array.from(document.querySelectorAll('img, svg')).filter((el) =>
+    /visa|mastercard|amex|paypal|klarna|afterpay|clearpay|gpay|google-?pay|apple-?pay|shop-?pay|upi|razorpay|stripe/i.test(
+      `${el.getAttribute('alt') ?? ''} ${el.getAttribute('src') ?? ''} ${el.className?.toString() ?? ''} ${el.getAttribute('aria-label') ?? ''}`,
+    ),
+  ).length;
+
+  function allTextForCommerce(): string {
+    return allText;
+  }
+
+  const ecommerce = {
+    priceVisible: !!priceNode,
+    priceAboveFold: !!priceRect && priceRect.top < VH && priceRect.bottom > 0,
+    priceText: priceNode ? text(priceNode).slice(0, 60) : null,
+    addToCartText: cartBtn ? (text(cartBtn) || cartBtn.getAttribute('aria-label') || '').slice(0, 60) : null,
+    addToCartAboveFold: !!cartRect && cartRect.top < VH && cartRect.bottom > 0,
+    addToCartWidth: cartRect ? Math.round(cartRect.width) : 0,
+    addToCartHeight: cartRect ? Math.round(cartRect.height) : 0,
+    variantGroups,
+    stockText: stockMatch ? stockMatch[0] : null,
+    galleryImages,
+    reviewWidget,
+    ratingText: ratingMatch ? ratingMatch[0].slice(0, 40) : null,
+    shippingInfo: /\b(free shipping|free delivery|ships? (in|within|today)|delivery by|dispatch)\b/i.test(allText),
+    returnsInfo: /\b(returns?|refunds?|exchanges?|money[- ]back)\b/i.test(allText),
+    paymentIcons,
+    productTiles: productLinks.size,
+    tilesWithPrice,
+    hasFilters,
+    hasSort,
+    cartLink: !!document.querySelector('a[href*="/cart" i], [class*="cart" i][href], [aria-label*="cart" i]'),
+    // A search *trigger* counts as search being available. Most mobile themes
+    // render an icon that opens an overlay, so there is no input in the DOM
+    // until it is tapped — reporting "no search box" there is wrong.
+    searchBox:
+      !!document.querySelector(
+        'input[type="search"], input[name*="search" i], input[placeholder*="search" i], [role="search"]',
+      ) ||
+      Array.from(document.querySelectorAll<HTMLElement>('button, a, [aria-label]')).some(
+        (el) =>
+          visible(el) &&
+          /^\s*search\b|search/i.test(
+            `${el.getAttribute('aria-label') ?? ''} ${el.getAttribute('title') ?? ''} ${el.getAttribute('href') ?? ''}`,
+          ),
+      ),
+  };
+
+  /* ---------------------------------------------------------------- *
    * Result
    * ---------------------------------------------------------------- */
 
@@ -522,6 +715,7 @@ export function collectFn(): CollectResult {
       jargonHits: countHits(JARGON),
       headlineHasNumber: h1 ? /\d/.test(h1) : false,
     },
+    ecommerce,
   };
 }
 
@@ -615,5 +809,28 @@ export interface CollectResult {
     featureHits: number;
     jargonHits: number;
     headlineHasNumber: boolean;
+  };
+  ecommerce: {
+    priceVisible: boolean;
+    priceAboveFold: boolean;
+    priceText: string | null;
+    addToCartText: string | null;
+    addToCartAboveFold: boolean;
+    addToCartWidth: number;
+    addToCartHeight: number;
+    variantGroups: number;
+    stockText: string | null;
+    galleryImages: number;
+    reviewWidget: boolean;
+    ratingText: string | null;
+    shippingInfo: boolean;
+    returnsInfo: boolean;
+    paymentIcons: number;
+    productTiles: number;
+    tilesWithPrice: number;
+    hasFilters: boolean;
+    hasSort: boolean;
+    cartLink: boolean;
+    searchBox: boolean;
   };
 }

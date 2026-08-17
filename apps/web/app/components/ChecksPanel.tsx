@@ -1,6 +1,14 @@
 'use client';
 
-import { CATEGORY_LABELS, type Check } from '@cro/shared';
+import { CATEGORY_LABELS, ROLE_LABELS, type Check } from '@cro/shared';
+
+const SCOPE_LABEL: Record<Check['scope'], string | null> = {
+  home: null,
+  site: null,
+  keypage: ROLE_LABELS.keypage,
+  collection: ROLE_LABELS.collection,
+  product: ROLE_LABELS.product,
+};
 
 const MARK: Record<Check['status'], string> = {
   pass: '✓',
@@ -16,7 +24,7 @@ function CheckItem({ check }: { check: Check }) {
       <div>
         <div className="title">
           {check.title}
-          {check.scope === 'keypage' && <span className="scope">key page</span>}
+          {SCOPE_LABEL[check.scope] && <span className="scope">{SCOPE_LABEL[check.scope]}</span>}
         </div>
         <div className="detail">{check.detail}</div>
       </div>

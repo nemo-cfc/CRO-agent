@@ -1,0 +1,15 @@
+{
+  // The build config excludes __tests__ so they stay out of dist/. That also
+  // meant fixtures drifted out of sync with the schema without anything
+  // failing — the tests still ran, because vitest strips types rather than
+  // checking them. This config is typecheck-only and covers everything.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    // rootDir is src/ for the build; widen it here so bench/ is covered too.
+    "rootDir": ".",
+    "types": ["node", "vitest/globals"]
+  },
+  "include": ["src/**/*", "bench/**/*"],
+  "exclude": []
+}

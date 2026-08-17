@@ -1,5 +1,5 @@
 import type { AuditEvidence, Check, Scorecard } from '@cro/shared';
-import { CATEGORY_LABELS } from '@cro/shared';
+import { CATEGORY_LABELS, PLATFORM_LABELS, ROLE_LABELS, isStore } from '@cro/shared';
 
 /**
  * The compact packet handed to the model.
@@ -35,24 +35,35 @@ export function buildEvidencePacket(
     .map((c) => c.title);
 
   const home = evidence.pages.find((p) => p.role === 'home' && p.ok);
-  const key = evidence.pages.find((p) => p.role === 'keypage' && p.ok);
+  const product = evidence.pages.find((p) => p.role === 'product' && p.ok);
+  const store = isStore(evidence.platform);
 
   return {
     site: {
       url: evidence.url,
       title: evidence.static?.title ?? null,
       description: evidence.static?.metaDescription ?? null,
-      platform: evidence.static?.generator ?? null,
+      platform: PLATFORM_LABELS[evidence.platform],
+      isOnlineStore: store,
       headline: home?.copy.h1 ?? null,
       supportingCopy: home?.copy.heroCopy ?? null,
       primaryCallToAction: home?.ctas[0]?.text ?? null,
     },
-    pagesAudited: {
-      homepage: evidence.url,
-      highIntentPage: evidence.keyPageUrl,
-      whyThatPage: evidence.keyPageReason,
-      highIntentHeadline: key?.copy.h1 ?? null,
-    },
+    pagesAudited: evidence.targets.map((t) => ({
+      role: ROLE_LABELS[t.role],
+      url: t.url,
+      whyThisPage: t.reason,
+    })),
+    // Named explicitly because a recommendation about the buy button needs to
+    // say which product page it was measured on.
+    productPage: product
+      ? {
+          url: product.finalUrl,
+          title: product.copy.h1,
+          price: product.ecommerce.priceText,
+          buyButton: product.ecommerce.addToCartText,
+        }
+      : null,
     scores: {
       overall: scorecard.overall,
       byCategory: Object.fromEntries(

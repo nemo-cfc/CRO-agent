@@ -13,7 +13,15 @@ import type {
   Viewport,
 } from '@cro/shared';
 
-const WORKER = process.env.NEXT_PUBLIC_WORKER_URL ?? 'http://localhost:8787';
+/**
+ * Where the audit runs.
+ *
+ * Set NEXT_PUBLIC_WORKER_URL to talk to the standalone worker, which keeps a
+ * warm Chromium pool and is the fast path. Leave it unset and the app uses its
+ * own /api/audit route, which runs the same pipeline in-process — the shape
+ * that works on serverless, at the cost of a cold browser per request.
+ */
+const WORKER = process.env.NEXT_PUBLIC_WORKER_URL ?? '';
 
 export interface Shot {
   role: PageRole;
@@ -90,25 +98,43 @@ export function useAuditStream() {
       }, 100);
 
       try {
-        const res = await fetch(`${WORKER}/audit`, {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ url: input }),
-          signal: controller.signal,
-        });
+        // fetch + ReadableStream rather than EventSource, so both transports
+        // share one code path and errors surface as real rejections.
+        let stream: Response;
 
-        const body = (await res.json()) as { jobId?: string; error?: string };
-        if (!res.ok || !body.jobId) {
-          stopTimer();
-          setState((s) => ({ ...s, status: 'error', error: body.error ?? 'Could not start the audit.' }));
-          return;
+        if (WORKER) {
+          // Standalone worker: create a job, then subscribe to its stream.
+          const res = await fetch(`${WORKER}/audit`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ url: input }),
+            signal: controller.signal,
+          });
+          const body = (await res.json()) as { jobId?: string; error?: string };
+          if (!res.ok || !body.jobId) {
+            stopTimer();
+            setState((s) => ({ ...s, status: 'error', error: body.error ?? 'Could not start the audit.' }));
+            return;
+          }
+          stream = await fetch(`${WORKER}/audit/${body.jobId}/stream`, {
+            signal: controller.signal,
+          });
+        } else {
+          // In-process route: one request that streams as the audit runs.
+          stream = await fetch('/api/audit', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ url: input }),
+            signal: controller.signal,
+          });
+          if (!stream.ok) {
+            const body = (await stream.json().catch(() => ({}))) as { error?: string };
+            stopTimer();
+            setState((s) => ({ ...s, status: 'error', error: body.error ?? 'Could not start the audit.' }));
+            return;
+          }
         }
 
-        // fetch + ReadableStream rather than EventSource, so the POST and the
-        // stream share one origin config and errors surface as real rejections.
-        const stream = await fetch(`${WORKER}/audit/${body.jobId}/stream`, {
-          signal: controller.signal,
-        });
         if (!stream.body) throw new Error('The audit stream could not be opened.');
 
         const reader = stream.body.getReader();

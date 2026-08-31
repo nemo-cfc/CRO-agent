@@ -1,4 +1,5 @@
-import { chromium, type Browser, type BrowserContext } from 'playwright';
+import type { Browser, BrowserContext } from 'playwright-core';
+import { isServerless, launchBrowser } from './launcher.js';
 import {
   config,
   DESKTOP_UA,
@@ -63,25 +64,18 @@ export class BrowserPool {
 
   async start(): Promise<void> {
     await this.#ensureBrowser();
-    await this.#fill();
+    // Pre-warming only pays off when there is a next request to be warm for.
+    // A serverless instance may serve one audit and be reclaimed, so paying
+    // for eight contexts up front is pure cold-start cost; acquire() creates
+    // what it needs on demand instead.
+    if (!isServerless()) await this.#fill();
   }
 
   async #ensureBrowser(): Promise<Browser> {
     if (this.#browser?.isConnected()) return this.#browser;
     if (this.#launching) return this.#launching;
 
-    this.#launching = chromium
-      .launch({
-        headless: true,
-        args: [
-          '--disable-dev-shm-usage',
-          '--no-sandbox',
-          '--disable-blink-features=AutomationControlled',
-          '--disable-background-timer-throttling',
-          '--disable-backgrounding-occluded-windows',
-          '--disable-renderer-backgrounding',
-        ],
-      })
+    this.#launching = launchBrowser()
       .then((b) => {
         this.#browser = b;
         this.#launching = null;
@@ -179,7 +173,7 @@ export class BrowserPool {
     const warm = this.#idle[viewport].pop();
     if (warm) {
       // Replenish in the background so the next audit still finds it warm.
-      void this.#fill();
+      if (!isServerless()) void this.#fill();
       return warm;
     }
     return this.#create(viewport);

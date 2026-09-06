@@ -1,5 +1,4 @@
-import { mkdir, writeFile } from 'node:fs/promises';
-import path from 'node:path';
+import { put } from '@vercel/blob';
 import { randomUUID } from 'node:crypto';
 import { validateLead } from '@/lib/lead';
 export const runtime='nodejs';
@@ -13,10 +12,8 @@ export async function POST(request:Request) {
  } catch(error) { return Response.json({error:error instanceof Error?error.message:'Check the form.'},{status:400}); }
  try {
   const id=randomUUID();
-  const directory=path.resolve(process.cwd(),'data','leads');
-  await mkdir(directory,{recursive:true});
   const route=lead.gmv==='100k-plus'||lead.intent==='plus'?'priority':lead.gmv==='under-5k'||lead.budget==='exploring'?'nurture':'standard';
-  await writeFile(path.join(directory,id+'.json'),JSON.stringify({id,createdAt:new Date().toISOString(),magnet:'cro',route,...lead},null,2),{flag:'wx',mode:0o600});
+  await put('leads/'+id+'.json',JSON.stringify({id,createdAt:new Date().toISOString(),magnet:'cro',route,...lead},null,2),{access:'private',addRandomSuffix:false,allowOverwrite:true});
   return Response.json({id,url:lead.storeUrl},{status:201,headers:{'Cache-Control':'no-store'}});
  } catch { return Response.json({error:'We could not save your details. Please try again.'},{status:500}); }
 }

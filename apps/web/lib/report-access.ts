@@ -1,7 +1,6 @@
 import 'server-only';
 import { createHash, timingSafeEqual } from 'node:crypto';
-import { readFile } from 'node:fs/promises';
-import path from 'node:path';
+import { get } from '@vercel/blob';
 import { cookies } from 'next/headers';
 import { validId } from './report-store';
 export const cookieName=(id:string)=>'mm_report_'+id;
@@ -10,7 +9,9 @@ export async function hasReportAccess(id:string){
  if(!validId(id))return false;
  const token=(await cookies()).get(cookieName(id))?.value;
  if(!token||!/^[a-f0-9]{64}$/.test(token))return false;
- try{const grant=JSON.parse(await readFile(path.resolve(process.cwd(),'data','grants',digest(token)+'.json'),'utf8'));
+ try{const result=await get('grants/'+digest(token)+'.json',{access:'private'});
+ if(!result)return false;
+ const grant=JSON.parse(await new Response(result.stream).text());
  return grant.reportId===id && grant.expiresAt>Date.now() && timingSafeEqual(Buffer.from(grant.hash,'hex'),Buffer.from(digest(token),'hex'));
  }catch{return false;}
 }

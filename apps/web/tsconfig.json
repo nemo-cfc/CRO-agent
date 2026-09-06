@@ -25,6 +25,12 @@
     "paths": {
       "@/*": [
         "./*"
+      ],
+      "@cro/shared": [
+        "../../packages/shared/src/index.ts"
+      ],
+      "@cro/worker/*": [
+        "../worker/src/*"
       ]
     }
   },

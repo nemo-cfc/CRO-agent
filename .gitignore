@@ -15,3 +15,6 @@ apps/web/.next-dev/
 
 # Local Netlify folder
 .netlify
+
+.vercel
+.env*

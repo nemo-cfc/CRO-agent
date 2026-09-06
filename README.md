@@ -23,13 +23,13 @@ Explicitly rejected: **Lighthouse** (15–40s on its own — replaced by in-page
 ```bash
 npm install
 npx playwright install chromium
-cp .env.example .env    # then add ANTHROPIC_API_KEY
+cp .env.example .env    # then add GROQ_API_KEY
 npm run dev
 ```
 
 Worker on `:8787`, frontend on `:3000`.
 
-Without `ANTHROPIC_API_KEY` the audit still runs and returns all 47 measured checks with scores — only the written recommendations are skipped, and the report says so.
+Without `GROQ_API_KEY` the audit still runs and returns all 47 measured checks with scores — only the written recommendations are skipped, and the report says so.
 
 ## Verifying the 30-second constraint
 
@@ -67,7 +67,7 @@ Full 17-site corpus (including two live Shopify stores), `--no-llm`, warm pool:
 
 Two caveats that matter more than the headline numbers:
 
-**The model-write phase is not in those figures.** The benchmark ran without an API key. Re-run `npm run bench` with `ANTHROPIC_API_KEY` set before relying on the 30-second claim — roughly 11–20s of headroom remains at p95, which should be comfortable at `effort=low` but is not yet verified. If it misses, the levers in order are: lower `CRO_EFFORT`, drop the second page to desktop-only, tighten `NAV_TIMEOUT_MS`.
+**The model-write phase is not in those figures.** The benchmark ran without an API key. Re-run `npm run bench` with `GROQ_API_KEY` set before relying on the 30-second claim — roughly 11–20s of headroom remains at p95, which should be comfortable at `effort=low` but is not yet verified. If it misses, the levers in order are: lower `CRO_EFFORT`, drop the second page to desktop-only, tighten `NAV_TIMEOUT_MS`.
 
 **Run-to-run variance is substantial on slow sites.** A five-site pass put `hubspot.com` at 19.5s where the full-corpus pass had it at 8.3s. The benchmark runs sites back-to-back with no gap, which is the worst case for the context pool: each audit borrows 4 of 4 contexts, so the next `acquire()` races the refill and falls back to creating on demand. Real traffic (human-paced, capped at 2 concurrent) gives the pool time to refill. If you plan to run audits back-to-back, raise `POOL_SIZE`.
 
@@ -79,7 +79,7 @@ apps/worker/
   src/browser/         Chromium pool, init script, single-pass DOM collector
   src/pipeline/        Orchestration, deadline, static HTML, key-page pick, SSRF guard
   src/rules/           47 checks in 10 category modules + weighted scoring
-  src/llm/             Cached rubric, evidence packet, streaming JSON extractor
+  src/llm/             Shared rubric, evidence packet, streaming JSON extractor
   bench/               Timing harness
 apps/web/              Next.js frontend, SSE consumer
 ```
@@ -114,12 +114,12 @@ apps/web/              Next.js frontend, SSE consumer
 
 | Variable | Default | |
 |---|---|---|
-| `ANTHROPIC_API_KEY` | — | Required for written recommendations |
+| `GROQ_API_KEY` | — | Required for written recommendations |
 | `CRUX_API_KEY` | — | Optional; enables real-user performance data |
 | `AUDIT_DEADLINE_MS` | `25000` | Hard wall, deliberately under the 30s requirement |
 | `POOL_SIZE` | `8` | Pre-warmed contexts; each audit borrows 4 |
 | `MAX_CONCURRENT_AUDITS` | `2` | Beyond this, requests queue |
-| `CRO_MODEL` | `claude-opus-5` | |
+| `CRO_MODEL` | `openai/gpt-oss-120b` | |
 | `CRO_EFFORT` | `low` | Latency lever — sweep `low` → `medium` with the bench |
 | `NAV_TIMEOUT_MS` | `12000` | Per-page navigation budget |
 
@@ -129,3 +129,9 @@ apps/web/              Next.js frontend, SSE consumer
 - `transferSize` reads 0 for cross-origin responses without `Timing-Allow-Origin`, so page weight is a floor, not a total. The check says so.
 - Page weight varies between runs on sites with lazy-loaded images, because the settle window is bounded at 2.5s. The verdict rarely changes; the exact number does.
 - Sites behind an interactive CDN challenge will be audited as the challenge page. Not currently detected.
+
+## Local lead capture
+
+The homepage collects store URL, intent, monthly sales, budget, timing, name, email, and optional phone before opening the automated report. Submissions are saved as individual JSON files in `apps/web/data/leads/` (excluded from Git). There is no public endpoint for listing leads. Email delivery and CRM sync are not configured. Back up this directory separately if you need to retain enquiries.
+
+Completed audits are saved in `apps/web/data/reports/`. The landing page polls for completion and opens `/reports/<random-id>` in a new tab. Report links grant access to their report; lead contact details are not included. Keep the local app and worker running for background audits.

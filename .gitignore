@@ -8,3 +8,10 @@ bench-results/
 
 # Machine-specific tool permissions, not project config
 .claude/settings.local.json
+
+# Local lead submissions (personal data)
+apps/web/data/
+apps/web/.next-dev/
+
+# Local Netlify folder
+.netlify

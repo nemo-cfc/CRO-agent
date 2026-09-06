@@ -12,14 +12,14 @@
     "test": "tsc -p tsconfig.test.json && vitest run"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.117.1",
     "@cro/shared": "*",
     "@fastify/cors": "^11.0.1",
     "@sparticuz/chromium": "^149.0.0",
     "cheerio": "^1.0.0",
     "fastify": "^5.2.1",
     "playwright-core": "^1.62.1",
-    "zod": "^3.24.1"
+    "zod": "^3.24.1",
+    "groq-sdk": "^0.37.0"
   },
   "devDependencies": {
     "@types/node": "^22.13.1",

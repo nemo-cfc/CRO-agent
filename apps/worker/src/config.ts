@@ -1,3 +1,9 @@
+import { existsSync } from 'node:fs';
+import { resolve } from 'node:path';
+
+const envPath = [resolve(process.cwd(), '.env'), resolve(process.cwd(), '../../.env')].find(existsSync);
+if (envPath) process.loadEnvFile(envPath);
+
 function int(name: string, fallback: number): number {
   const raw = process.env[name];
   if (!raw) return fallback;
@@ -29,9 +35,9 @@ export const config = {
   /** Budget for the CrUX call. Skipped entirely without a key. */
   cruxTimeoutMs: int('CRUX_TIMEOUT_MS', 3_000),
 
-  anthropicApiKey: process.env.ANTHROPIC_API_KEY ?? '',
+  groqApiKey: process.env.GROQ_API_KEY ?? '',
   cruxApiKey: process.env.CRUX_API_KEY ?? '',
-  model: process.env.CRO_MODEL ?? 'claude-opus-5',
+  model: process.env.CRO_MODEL ?? 'openai/gpt-oss-120b',
   /** Latency lever. Sweep low -> medium with `npm run bench`. */
   effort: (process.env.CRO_EFFORT ?? 'low') as 'low' | 'medium' | 'high',
 

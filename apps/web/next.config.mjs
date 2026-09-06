@@ -1,6 +1,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
+  distDir: process.env.NODE_ENV === 'development' ? '.next-dev' : '.next',
   // Both workspace packages ship TypeScript source rather than a build step,
   // so Next compiles them as part of the app.
   transpilePackages: ['@cro/shared', '@cro/worker'],

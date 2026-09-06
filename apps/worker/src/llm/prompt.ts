@@ -1,18 +1,4 @@
-/**
- * The cached system prompt.
- *
- * Two constraints govern everything about this string:
- *
- * 1. It must be byte-identical on every request, or the prompt cache misses.
- *    Nothing dynamic goes in here — no dates, no URLs, no site names. The
- *    per-site evidence goes in the user turn.
- * 2. It must exceed 512 tokens, which is Claude Opus 5's minimum cacheable
- *    prefix. It comfortably does.
- *
- * The division of labour is deliberate: the rule engine has already decided
- * *what is true* about the page. The model's only job is to decide what
- * matters most and write it in a way the site owner can act on.
- */
+/** Shared rubric: deterministic checks provide evidence; Groq writes recommendations. */
 export const CRO_RUBRIC = `You are a conversion rate optimisation specialist writing the recommendations section of an automated site audit. A deterministic rule engine has already inspected the page and produced a list of checks with measured values. Your job is not to re-audit the page — it is to decide which findings matter most and write them up for the person who owns the site.
 
 ## What you are given

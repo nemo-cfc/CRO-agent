@@ -18,7 +18,7 @@ app.get('/health', async () => ({
   browser: pool.stats(),
   queue: queueDepth(),
   model: config.model,
-  hasApiKey: config.anthropicApiKey.length > 0,
+  hasApiKey: config.groqApiKey.length > 0,
 }));
 
 app.post('/audit', async (request, reply) => {
@@ -107,8 +107,8 @@ const warmStart = Date.now();
 await pool.start();
 app.log.info({ ms: Date.now() - warmStart, ...pool.stats() }, 'browser pool ready');
 
-if (!config.anthropicApiKey) {
-  app.log.warn('ANTHROPIC_API_KEY is not set — audits will return checks without written recommendations.');
+if (!config.groqApiKey) {
+  app.log.warn('GROQ_API_KEY is not set — audits will return checks without written recommendations.');
 }
 
 await app.listen({ port: config.port, host: config.host });

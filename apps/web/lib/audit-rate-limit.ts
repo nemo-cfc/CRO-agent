@@ -1,0 +1,9 @@
+type Bucket = { starts: number[]; urls: Map<string, number> };
+const buckets = new Map<string, Bucket>();
+const windowMs = () => Number.parseInt(process.env.AUDIT_RATE_WINDOW_MS ?? '3600000', 10) || 3600000;
+const maxPerWindow = () => Number.parseInt(process.env.AUDIT_RATE_MAX_PER_IP ?? '3', 10) || 3;
+const duplicateWindowMs = () => Number.parseInt(process.env.AUDIT_DUPLICATE_WINDOW_MS ?? '1800000', 10) || 1800000;
+function bucketFor(ip: string): Bucket { let bucket = buckets.get(ip); if (!bucket) { bucket = { starts: [], urls: new Map() }; buckets.set(ip, bucket); } return bucket; }
+export function clientIp(request: Request): string { if (process.env.TRUST_PROXY !== 'false') { const forwarded = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim(); if (forwarded) return forwarded.slice(0, 120); } return request.headers.get('x-real-ip')?.slice(0, 120) || 'unknown'; }
+export function checkAuditLimit(ip: string, url: string): { allowed: true } | { allowed: false; retryAfter: number; reason: 'ip' | 'duplicate' } { const now=Date.now(),bucket=bucketFor(ip); bucket.starts=bucket.starts.filter(t=>now-t<windowMs()); for(const [u,t] of bucket.urls) if(now-t>=duplicateWindowMs()) bucket.urls.delete(u); const last=bucket.urls.get(url); if(last!==undefined)return {allowed:false,retryAfter:Math.max(1,Math.ceil((duplicateWindowMs()-(now-last))/1000)),reason:'duplicate'}; if(bucket.starts.length>=maxPerWindow())return {allowed:false,retryAfter:Math.max(1,Math.ceil((windowMs()-(now-bucket.starts[0]))/1000)),reason:'ip'}; bucket.starts.push(now);bucket.urls.set(url,now);return {allowed:true}; }
+setInterval(()=>{const now=Date.now();for(const [ip,b] of buckets){b.starts=b.starts.filter(t=>now-t<windowMs());for(const [u,t] of b.urls)if(now-t>=duplicateWindowMs())b.urls.delete(u);if(!b.starts.length&&!b.urls.size)buckets.delete(ip);}},900000).unref();

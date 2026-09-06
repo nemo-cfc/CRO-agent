@@ -1,4 +1,4 @@
-import Anthropic from '@anthropic-ai/sdk';
+import Groq from 'groq-sdk';
 import {
   RECOMMENDATIONS_JSON_SCHEMA,
   RecommendationSchema,
@@ -13,9 +13,9 @@ import { CRO_RUBRIC } from './prompt.js';
 import { buildEvidencePacket } from './evidence-packet.js';
 import { StreamingJsonExtractor } from './stream-parse.js';
 
-let client: Anthropic | null = null;
-function getClient(): Anthropic {
-  if (!client) client = new Anthropic({ apiKey: config.anthropicApiKey || undefined });
+let client: Groq | null = null;
+function getClient(): Groq {
+  if (!client) client = new Groq({ apiKey: config.groqApiKey || undefined, maxRetries: 2 });
   return client;
 }
 
@@ -45,11 +45,11 @@ export async function writeRecommendations(
   signal: AbortSignal,
   cb: RecommendCallbacks,
 ): Promise<RecommendResult> {
-  if (!config.anthropicApiKey) {
+  if (!config.groqApiKey) {
     return {
       ok: false,
       count: 0,
-      note: 'ANTHROPIC_API_KEY is not set — the report shows measured checks only.',
+      note: 'GROQ_API_KEY is not set — the report shows measured checks only.',
       usage: null,
     };
   }
@@ -60,39 +60,25 @@ export async function writeRecommendations(
   let emittedSummary = false;
 
   try {
-    const stream = getClient().messages.stream(
-      {
-        model: config.model,
-        max_tokens: 8000,
-        output_config: {
-          // Latency lever, not a quality lever: the hard analysis already
-          // happened in the rule engine. Sweep low -> medium with `npm run bench`.
-          effort: config.effort,
-          format: { type: 'json_schema', schema: RECOMMENDATIONS_JSON_SCHEMA },
-        },
-        // Adaptive thinking is left at its default. Disabling it on Opus 5 can
-        // leak <thinking> tags into the output, and `effort` is the cheaper
-        // control for the latency we actually care about.
-        system: [
-          {
-            type: 'text',
-            text: CRO_RUBRIC,
-            // Byte-identical across audits, so every run after the first reads
-            // the rubric from cache at ~0.1x input cost.
-            cache_control: { type: 'ephemeral' },
-          },
-        ],
-        messages: [
-          {
-            role: 'user',
-            content: `Write the recommendations for this audit.\n\n${JSON.stringify(packet, null, 1)}`,
-          },
-        ],
-      },
-      { signal },
-    );
-
-    stream.on('text', (delta) => {
+    const stream = await getClient().chat.completions.create({
+      model: config.model,
+      max_completion_tokens: 8000,
+      reasoning_effort: config.effort,
+      stream: true,
+      response_format: { type: 'json_object' },
+      messages: [
+        { role: 'system', content: CRO_RUBRIC + '\nReturn only JSON matching this schema: ' + JSON.stringify(RECOMMENDATIONS_JSON_SCHEMA) },
+        { role: 'user', content: 'Write the recommendations for this audit.\n\n' + JSON.stringify(packet, null, 1) },
+      ],
+    }, { signal });
+    let finishReason: string | null = null;
+    let usage: RecommendResult['usage'] = null;
+    for await (const chunk of stream) {
+      const choice = chunk.choices[0];
+      if (choice?.finish_reason) finishReason = choice.finish_reason;
+      const u = chunk.x_groq?.usage;
+      if (u) usage = { inputTokens: u.prompt_tokens, outputTokens: u.completion_tokens, cacheRead: 0, cacheWrite: 0 };
+      const delta = choice?.delta?.content ?? '';
       const { summary, recommendations } = extractor.push(delta);
 
       if (summary && !emittedSummary) {
@@ -104,11 +90,9 @@ export async function writeRecommendations(
         const parsed = RecommendationSchema.safeParse(raw);
         if (parsed.success) cb.onRecommendation(parsed.data, index++);
       }
-    });
+    }
 
-    const final = await stream.finalMessage();
-
-    if (final.stop_reason === 'refusal') {
+    if (finishReason === 'content_filter') {
       return {
         ok: false,
         count: index,
@@ -127,22 +111,16 @@ export async function writeRecommendations(
       }
     }
 
-    const u = final.usage;
     return {
       ok: index > 0,
       count: index,
       note:
-        final.stop_reason === 'max_tokens'
+        finishReason === 'length'
           ? 'Recommendations were cut short by the output limit.'
           : index === 0
             ? 'The model returned no usable recommendations.'
             : null,
-      usage: {
-        inputTokens: u.input_tokens,
-        outputTokens: u.output_tokens,
-        cacheRead: u.cache_read_input_tokens ?? 0,
-        cacheWrite: u.cache_creation_input_tokens ?? 0,
-      },
+      usage,
     };
   } catch (err) {
     if (signal.aborted) {

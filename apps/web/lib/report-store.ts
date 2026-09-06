@@ -19,7 +19,7 @@ async function readBlob(id: string): Promise<StoredReport | null> {
 export async function saveReport(report: StoredReport) {
   if (!validId(report.id)) throw new Error('Invalid report ID');
   if (useBlob()) {
-    await put(report.id + '.json', JSON.stringify(report), { access: 'private', addRandomSuffix: false });
+    await put(report.id + '.json', JSON.stringify(report), { access: 'private', addRandomSuffix: false, allowOverwrite: true });
     return;
   }
   await mkdir(directory(), { recursive: true });

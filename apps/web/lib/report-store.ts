@@ -1,5 +1,5 @@
 import 'server-only';
-import { getStore } from '@netlify/blobs';
+import { get, put } from '@vercel/blob';
 import { mkdir, readFile, writeFile, rename } from 'node:fs/promises';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
@@ -8,13 +8,18 @@ import type { ReportState } from './report-state';
 export type StoredReport = { id: string; createdAt: string; status: 'running' | 'done' | 'error'; partial: boolean; state: ReportState };
 export const validId = (id: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
 const directory = () => path.resolve(process.cwd(), 'data', 'reports');
-const onNetlify = () => process.env.NETLIFY === 'true' || Boolean(process.env.NETLIFY_SITE_ID);
-const reports = () => getStore({ name: 'cro-auditor-reports', consistency: 'strong' });
+const useBlob = () => Boolean(process.env.BLOB_READ_WRITE_TOKEN);
+
+async function readBlob(id: string): Promise<StoredReport | null> {
+  const result = await get(id + '.json', { access: 'private' });
+  if (!result) return null;
+  return JSON.parse(await new Response(result.stream).text()) as StoredReport;
+}
 
 export async function saveReport(report: StoredReport) {
   if (!validId(report.id)) throw new Error('Invalid report ID');
-  if (onNetlify()) {
-    await reports().setJSON(report.id, report);
+  if (useBlob()) {
+    await put(report.id + '.json', JSON.stringify(report), { access: 'private', addRandomSuffix: false });
     return;
   }
   await mkdir(directory(), { recursive: true });
@@ -26,9 +31,9 @@ export async function saveReport(report: StoredReport) {
 
 export async function readReport(id: string): Promise<StoredReport | null> {
   if (!validId(id)) return null;
-  let report: StoredReport | null = null;
-  if (onNetlify()) {
-    report = (await reports().get(id, { type: 'json', consistency: 'strong' })) as StoredReport | null;
+  let report: StoredReport | null;
+  if (useBlob()) {
+    report = await readBlob(id);
   } else {
     try {
       report = JSON.parse(await readFile(path.join(directory(), id + '.json'), 'utf8')) as StoredReport;

@@ -1,5 +1,5 @@
 import { storeUrl } from '@/lib/lead';
-import { assertPublicHost } from '@cro/worker/url';
+import { assertPublicHost } from '../../../../worker/src/pipeline/url.js';
 import { after } from 'next/server';
 import { randomUUID } from 'node:crypto';
 import type { AuditEvent } from '@cro/shared';

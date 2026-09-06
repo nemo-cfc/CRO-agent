@@ -1,7 +1,7 @@
 import { NextRequest } from 'next/server';
 import type { AuditEvent } from '@cro/shared';
-import { runAudit } from '@cro/worker/pipeline';
-import { assertPublicHost, normalizeUrl, UrlRejected } from '@cro/worker/url';
+import { runAudit } from '../../../../worker/src/pipeline/run.js';
+import { assertPublicHost, normalizeUrl, UrlRejected } from '../../../../worker/src/pipeline/url.js';
 
 // Chromium needs the Node runtime; the edge runtime cannot launch a process.
 export const runtime = 'nodejs';

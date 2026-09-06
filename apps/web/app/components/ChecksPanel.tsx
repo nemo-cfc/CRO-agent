@@ -37,8 +37,6 @@ export function ChecksPanel({ checks }: { checks: Check[] }) {
   const passed = checks.filter((c) => c.status === 'pass');
   const notApplicable = checks.filter((c) => c.status === 'na');
 
-  // Failures first, then warnings, then heaviest within each — the same
-  // ordering the model receives, so the report reads consistently.
   const ordered = [...problems].sort((a, b) => {
     if (a.status !== b.status) return a.status === 'fail' ? -1 : 1;
     return b.weight - a.weight;
@@ -53,15 +51,18 @@ export function ChecksPanel({ checks }: { checks: Check[] }) {
 
   return (
     <section className="panel">
-      <h2>
-        What we measured — {problems.length} issue{problems.length === 1 ? '' : 's'} across{' '}
-        {checks.length} checks
-      </h2>
+      <div className="panelHead">
+        <h2>Diagnostics</h2>
+        <p>
+          {problems.length} issue{problems.length === 1 ? '' : 's'} across {checks.length} live
+          checks — failures first.
+        </p>
+      </div>
 
       {problems.length === 0 && (
-        <p style={{ margin: 0, color: 'var(--muted)' }}>
-          Every applicable check passed. That is unusual — worth a manual look to confirm the page
-          rendered as expected.
+        <p className="emptyChecks">
+          Every applicable check passed. Unusual — worth a manual look to confirm the page rendered
+          as expected.
         </p>
       )}
 
@@ -70,7 +71,7 @@ export function ChecksPanel({ checks }: { checks: Check[] }) {
           <h3>
             {CATEGORY_LABELS[category as keyof typeof CATEGORY_LABELS] ?? category}
             <span className="count">
-              {list.filter((c) => c.status === 'fail').length} failed,{' '}
+              {list.filter((c) => c.status === 'fail').length} failed ·{' '}
               {list.filter((c) => c.status === 'warn').length} to review
             </span>
           </h3>

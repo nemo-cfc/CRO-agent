@@ -23,13 +23,14 @@ Explicitly rejected: **Lighthouse** (15–40s on its own — replaced by in-page
 ```bash
 npm install
 npx playwright install chromium
-cp .env.example .env    # then add ANTHROPIC_API_KEY
+# `npm install` copies .env.example → .env if you do not already have one
+# then paste a free Groq key from https://console.groq.com/keys
 npm run dev
 ```
 
 Worker on `:8787`, frontend on `:3000`.
 
-Without `ANTHROPIC_API_KEY` the audit still runs and returns all 47 measured checks with scores — only the written recommendations are skipped, and the report says so.
+Without `GROQ_API_KEY` the audit still runs and returns all 47 measured checks with scores — only the written recommendations are skipped, and the report says so.
 
 ## Verifying the 30-second constraint
 
@@ -67,7 +68,7 @@ Full 17-site corpus (including two live Shopify stores), `--no-llm`, warm pool:
 
 Two caveats that matter more than the headline numbers:
 
-**The model-write phase is not in those figures.** The benchmark ran without an API key. Re-run `npm run bench` with `ANTHROPIC_API_KEY` set before relying on the 30-second claim — roughly 11–20s of headroom remains at p95, which should be comfortable at `effort=low` but is not yet verified. If it misses, the levers in order are: lower `CRO_EFFORT`, drop the second page to desktop-only, tighten `NAV_TIMEOUT_MS`.
+**The model-write phase is not in those figures.** The benchmark ran without an API key. Re-run `npm run bench` with `GROQ_API_KEY` set before relying on the 30-second claim — Groq is typically much faster than a frontier model, so the remaining budget is generous. If it misses, the levers in order are: lower `CRO_EFFORT`, drop the second page to desktop-only, tighten `NAV_TIMEOUT_MS`.
 
 **Run-to-run variance is substantial on slow sites.** A five-site pass put `hubspot.com` at 19.5s where the full-corpus pass had it at 8.3s. The benchmark runs sites back-to-back with no gap, which is the worst case for the context pool: each audit borrows 4 of 4 contexts, so the next `acquire()` races the refill and falls back to creating on demand. Real traffic (human-paced, capped at 2 concurrent) gives the pool time to refill. If you plan to run audits back-to-back, raise `POOL_SIZE`.
 
@@ -114,13 +115,13 @@ apps/web/              Next.js frontend, SSE consumer
 
 | Variable | Default | |
 |---|---|---|
-| `ANTHROPIC_API_KEY` | — | Required for written recommendations |
+| `GROQ_API_KEY` | — | Required for written recommendations (free at [console.groq.com/keys](https://console.groq.com/keys)) |
 | `CRUX_API_KEY` | — | Optional; enables real-user performance data |
 | `AUDIT_DEADLINE_MS` | `25000` | Hard wall, deliberately under the 30s requirement |
 | `POOL_SIZE` | `8` | Pre-warmed contexts; each audit borrows 4 |
 | `MAX_CONCURRENT_AUDITS` | `2` | Beyond this, requests queue |
-| `CRO_MODEL` | `claude-opus-5` | |
-| `CRO_EFFORT` | `low` | Latency lever — sweep `low` → `medium` with the bench |
+| `CRO_MODEL` | `llama-3.3-70b-versatile` | Groq model id |
+| `CRO_EFFORT` | `low` | Sampling temperature lever — sweep `low` → `medium` with the bench |
 | `NAV_TIMEOUT_MS` | `12000` | Per-page navigation budget |
 
 ## Known limits

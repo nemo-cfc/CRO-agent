@@ -1,3 +1,7 @@
+import { loadRootEnv } from '../../scripts/load-root-env.mjs';
+
+loadRootEnv();
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
@@ -6,7 +10,7 @@ const nextConfig = {
   transpilePackages: ['@cro/shared', '@cro/worker'],
   // Chromium and its launcher must stay external: bundling a package that
   // resolves a binary at runtime breaks the path it computes.
-  serverExternalPackages: ['playwright-core', 'playwright', '@sparticuz/chromium'],
+  serverExternalPackages: ['playwright-core', 'playwright', '@sparticuz/chromium', 'groq-sdk'],
   webpack: (config) => {
     // The worker is written for NodeNext, where relative imports carry a `.js`
     // suffix even though the file on disk is `.ts`. Node resolves that; webpack

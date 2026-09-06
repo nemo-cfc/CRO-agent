@@ -3,11 +3,12 @@
  *
  * Two constraints govern everything about this string:
  *
- * 1. It must be byte-identical on every request, or the prompt cache misses.
- *    Nothing dynamic goes in here — no dates, no URLs, no site names. The
- *    per-site evidence goes in the user turn.
- * 2. It must exceed 512 tokens, which is Claude Opus 5's minimum cacheable
- *    prefix. It comfortably does.
+ * 1. It must be byte-identical on every request. Nothing dynamic goes in
+ *    here — no dates, no URLs, no site names. The per-site evidence goes in
+ *    the user turn. (Groq prompt caching is not used; keeping it stable still
+ *    keeps the writing layer reproducible.)
+ * 2. Keep it long enough that the model has the full calibration, not a
+ *    slogan. The evidence packet is already compact.
  *
  * The division of labour is deliberate: the rule engine has already decided
  * *what is true* about the page. The model's only job is to decide what

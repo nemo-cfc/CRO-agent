@@ -1,3 +1,31 @@
+import { existsSync, readFileSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+function loadEnvFile(path: string): void {
+  if (!existsSync(path)) return;
+  for (const raw of readFileSync(path, 'utf8').split('\n')) {
+    const line = raw.trim();
+    if (!line || line.startsWith('#')) continue;
+    const eq = line.indexOf('=');
+    if (eq === -1) continue;
+    const key = line.slice(0, eq).trim();
+    let val = line.slice(eq + 1).trim();
+    if (
+      (val.startsWith('"') && val.endsWith('"')) ||
+      (val.startsWith("'") && val.endsWith("'"))
+    ) {
+      val = val.slice(1, -1);
+    }
+    if (process.env[key] === undefined) process.env[key] = val;
+  }
+}
+
+const here = dirname(fileURLToPath(import.meta.url));
+// apps/worker/src → repo root
+loadEnvFile(resolve(here, '../../../.env'));
+loadEnvFile(resolve(process.cwd(), '.env'));
+
 function int(name: string, fallback: number): number {
   const raw = process.env[name];
   if (!raw) return fallback;
@@ -29,16 +57,24 @@ export const config = {
   /** Budget for the CrUX call. Skipped entirely without a key. */
   cruxTimeoutMs: int('CRUX_TIMEOUT_MS', 3_000),
 
-  anthropicApiKey: process.env.ANTHROPIC_API_KEY ?? '',
-  cruxApiKey: process.env.CRUX_API_KEY ?? '',
-  model: process.env.CRO_MODEL ?? 'claude-opus-5',
-  /** Latency lever. Sweep low -> medium with `npm run bench`. */
+  get groqApiKey(): string {
+    return process.env.GROQ_API_KEY ?? '';
+  },
+  get cruxApiKey(): string {
+    return process.env.CRUX_API_KEY ?? '';
+  },
+  /** Groq free-tier default. Override with CRO_MODEL. */
+  model: process.env.CRO_MODEL ?? 'llama-3.3-70b-versatile',
+  /**
+   * Maps onto sampling temperature on Groq (there is no Claude-style effort
+   * knob). Sweep low → medium with `npm run bench`.
+   */
   effort: (process.env.CRO_EFFORT ?? 'low') as 'low' | 'medium' | 'high',
 
   userAgent:
     process.env.CRO_USER_AGENT ??
     'Mozilla/5.0 (compatible; CROAgent/0.1; +https://example.com/cro-agent)',
-} as const;
+};
 
 export const DESKTOP_VIEWPORT = { width: 1440, height: 900 } as const;
 export const MOBILE_VIEWPORT = { width: 390, height: 844 } as const;

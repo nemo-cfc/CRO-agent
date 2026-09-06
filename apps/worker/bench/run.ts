@@ -96,7 +96,7 @@ async function main(): Promise<void> {
   const repeat = Number.parseInt(arg('repeat') ?? '1', 10);
   const noLlm = flag('no-llm');
 
-  if (noLlm) process.env['ANTHROPIC_API_KEY'] = '';
+  if (noLlm) process.env['GROQ_API_KEY'] = '';
 
   // Normalise up front so `--sites example.com` (no scheme) is usable and the
   // reporting below can parse every entry as a URL.

@@ -66,7 +66,8 @@ app.get<{ Params: { id: string } }>('/audit/:id/stream', (request, reply) => {
     reply.raw.write(`data: ${JSON.stringify(event)}\n\n`);
   };
 
-  const unsubscribe = subscribe(job, (event) => {
+  let unsubscribe: () => void = () => {};
+  unsubscribe = subscribe(job, (event) => {
     send(event);
     if (event.type === 'done') {
       unsubscribe();

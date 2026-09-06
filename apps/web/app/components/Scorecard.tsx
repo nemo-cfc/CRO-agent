@@ -8,20 +8,45 @@ function colorFor(score: number): string {
   return 'var(--fail)';
 }
 
+function Ring({ score }: { score: number }) {
+  const r = 54;
+  const c = 2 * Math.PI * r;
+  const offset = c - (score / 100) * c;
+  const color = colorFor(score);
+
+  return (
+    <div className="ringWrap">
+      <svg className="ring" viewBox="0 0 128 128" aria-hidden>
+        <circle className="ringTrack" cx="64" cy="64" r={r} />
+        <circle
+          className="ringValue"
+          cx="64"
+          cy="64"
+          r={r}
+          stroke={color}
+          strokeDasharray={c}
+          strokeDashoffset={offset}
+        />
+      </svg>
+      <div className="bigScore" style={{ color }}>
+        {score}
+        <small>/100</small>
+      </div>
+    </div>
+  );
+}
+
 export function Scorecard({ scorecard }: { scorecard: ScorecardType }) {
   return (
-    <section className="panel">
-      <h2>Score</h2>
+    <section className="panel scorePanel">
+      <div className="panelHead">
+        <h2>Conversion score</h2>
+        <p>Weighted across the checks that actually apply to this site.</p>
+      </div>
       <div className="scoreRow">
-        <div className="bigScore" style={{ color: colorFor(scorecard.overall) }}>
-          {scorecard.overall}
-          <small> / 100</small>
-        </div>
+        <Ring score={scorecard.overall} />
         <div className="cats">
           {scorecard.categories.map((c) => {
-            // A category with nothing applicable (no form on the page, say) is
-            // shown as "n/a" rather than a free 100 — it is excluded from the
-            // overall score, and pretending otherwise would be misleading.
             const na = c.applicable === 0;
             return (
               <div className={`cat ${na ? 'na' : ''}`} key={c.category}>

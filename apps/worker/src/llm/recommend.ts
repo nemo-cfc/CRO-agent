@@ -1,6 +1,5 @@
-import Anthropic from '@anthropic-ai/sdk';
+import Groq from 'groq-sdk';
 import {
-  RECOMMENDATIONS_JSON_SCHEMA,
   RecommendationSchema,
   RecommendationsPayloadSchema,
   type AuditEvidence,
@@ -13,11 +12,34 @@ import { CRO_RUBRIC } from './prompt.js';
 import { buildEvidencePacket } from './evidence-packet.js';
 import { StreamingJsonExtractor } from './stream-parse.js';
 
-let client: Anthropic | null = null;
-function getClient(): Anthropic {
-  if (!client) client = new Anthropic({ apiKey: config.anthropicApiKey || undefined });
+const TEMPERATURE: Record<typeof config.effort, number> = {
+  low: 0.15,
+  medium: 0.35,
+  high: 0.55,
+};
+
+let client: Groq | null = null;
+function getClient(): Groq {
+  if (!client) client = new Groq({ apiKey: config.groqApiKey || undefined });
   return client;
 }
+
+const JSON_SHAPE = `Return a single JSON object (no markdown) with this shape:
+{
+  "summary": string,
+  "recommendations": [
+    {
+      "title": string,
+      "category": "aboveFold" | "cta" | "trust" | "forms" | "speed" | "mobile" | "copy" | "technical" | "tracking" | "friction" | "ecommerce",
+      "severity": "critical" | "high" | "medium" | "low",
+      "impact": "high" | "medium" | "low",
+      "effort": "quick-win" | "moderate" | "significant",
+      "why_it_matters": string,
+      "fix": string,
+      "evidence_refs": string[]
+    }
+  ]
+}`;
 
 export interface RecommendCallbacks {
   onSummary(text: string): void;
@@ -36,7 +58,8 @@ export interface RecommendResult {
  * page; this turns those findings into prioritised, written recommendations.
  *
  * Streams so the frontend can render each recommendation as it completes
- * rather than waiting for the whole document.
+ * rather than waiting for the whole document. Groq's json_schema mode cannot
+ * stream, so we use json_object mode and extract objects as they close.
  */
 export async function writeRecommendations(
   evidence: AuditEvidence,
@@ -45,11 +68,11 @@ export async function writeRecommendations(
   signal: AbortSignal,
   cb: RecommendCallbacks,
 ): Promise<RecommendResult> {
-  if (!config.anthropicApiKey) {
+  if (!config.groqApiKey) {
     return {
       ok: false,
       count: 0,
-      note: 'ANTHROPIC_API_KEY is not set — the report shows measured checks only.',
+      note: 'GROQ_API_KEY is not set — the report shows measured checks only.',
       usage: null,
     };
   }
@@ -58,31 +81,30 @@ export async function writeRecommendations(
   const extractor = new StreamingJsonExtractor();
   let index = 0;
   let emittedSummary = false;
+  let usage: RecommendResult['usage'] = null;
+
+  const applyDelta = (delta: string) => {
+    const { summary, recommendations } = extractor.push(delta);
+    if (summary && !emittedSummary) {
+      emittedSummary = true;
+      cb.onSummary(summary);
+    }
+    for (const raw of recommendations) {
+      const parsed = RecommendationSchema.safeParse(raw);
+      if (parsed.success) cb.onRecommendation(parsed.data, index++);
+    }
+  };
 
   try {
-    const stream = getClient().messages.stream(
+    const stream = await getClient().chat.completions.create(
       {
         model: config.model,
         max_tokens: 8000,
-        output_config: {
-          // Latency lever, not a quality lever: the hard analysis already
-          // happened in the rule engine. Sweep low -> medium with `npm run bench`.
-          effort: config.effort,
-          format: { type: 'json_schema', schema: RECOMMENDATIONS_JSON_SCHEMA },
-        },
-        // Adaptive thinking is left at its default. Disabling it on Opus 5 can
-        // leak <thinking> tags into the output, and `effort` is the cheaper
-        // control for the latency we actually care about.
-        system: [
-          {
-            type: 'text',
-            text: CRO_RUBRIC,
-            // Byte-identical across audits, so every run after the first reads
-            // the rubric from cache at ~0.1x input cost.
-            cache_control: { type: 'ephemeral' },
-          },
-        ],
+        temperature: TEMPERATURE[config.effort],
+        stream: true,
+        response_format: { type: 'json_object' },
         messages: [
+          { role: 'system', content: `${CRO_RUBRIC}\n\n${JSON_SHAPE}` },
           {
             role: 'user',
             content: `Write the recommendations for this audit.\n\n${JSON.stringify(packet, null, 1)}`,
@@ -92,33 +114,20 @@ export async function writeRecommendations(
       { signal },
     );
 
-    stream.on('text', (delta) => {
-      const { summary, recommendations } = extractor.push(delta);
-
-      if (summary && !emittedSummary) {
-        emittedSummary = true;
-        cb.onSummary(summary);
+    for await (const chunk of stream) {
+      const delta = chunk.choices[0]?.delta?.content;
+      if (delta) applyDelta(delta);
+      const u = chunk.x_groq?.usage;
+      if (u) {
+        usage = {
+          inputTokens: u.prompt_tokens,
+          outputTokens: u.completion_tokens,
+          cacheRead: 0,
+          cacheWrite: 0,
+        };
       }
-
-      for (const raw of recommendations) {
-        const parsed = RecommendationSchema.safeParse(raw);
-        if (parsed.success) cb.onRecommendation(parsed.data, index++);
-      }
-    });
-
-    const final = await stream.finalMessage();
-
-    if (final.stop_reason === 'refusal') {
-      return {
-        ok: false,
-        count: index,
-        note: 'The model declined to write recommendations for this site.',
-        usage: null,
-      };
     }
 
-    // Whole-document validation. The streamed items were validated one at a
-    // time; this catches a truncated array that the scanner could not see.
     if (index === 0) {
       const whole = RecommendationsPayloadSchema.safeParse(safeJson(extractor.raw));
       if (whole.success) {
@@ -127,22 +136,11 @@ export async function writeRecommendations(
       }
     }
 
-    const u = final.usage;
     return {
       ok: index > 0,
       count: index,
-      note:
-        final.stop_reason === 'max_tokens'
-          ? 'Recommendations were cut short by the output limit.'
-          : index === 0
-            ? 'The model returned no usable recommendations.'
-            : null,
-      usage: {
-        inputTokens: u.input_tokens,
-        outputTokens: u.output_tokens,
-        cacheRead: u.cache_read_input_tokens ?? 0,
-        cacheWrite: u.cache_creation_input_tokens ?? 0,
-      },
+      note: index === 0 ? 'The model returned no usable recommendations.' : null,
+      usage,
     };
   } catch (err) {
     if (signal.aborted) {
@@ -150,14 +148,14 @@ export async function writeRecommendations(
         ok: index > 0,
         count: index,
         note: 'Ran out of time before the recommendations finished.',
-        usage: null,
+        usage,
       };
     }
     return {
       ok: false,
       count: index,
       note: `Could not generate recommendations: ${err instanceof Error ? err.message : String(err)}`,
-      usage: null,
+      usage,
     };
   }
 }

@@ -1,5 +1,4 @@
 import { NextResponse } from 'next/server';
-import { mkdir, writeFile } from 'node:fs/promises';
 import { put } from '@vercel/blob';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { validateReportLead } from '@/lib/lead';

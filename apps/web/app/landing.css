@@ -57,3 +57,29 @@
 .landing-compact .lp-repeat { background:var(--moss); border:2px solid var(--soil); border-radius:3px; box-shadow:8px 8px 0 var(--soil); }
 .landing-compact .lp-repeat .lp-button { background:var(--cream); color:var(--soil)!important; }
 @media(max-width:900px){ .landing-compact .lp-hero{grid-template-columns:1fr;gap:48px}.landing-compact .lp-formcard{transform:none;box-shadow:7px 7px 0 var(--moss)} }
+/* Final Monkeyman palette: preserve the live brand identity */
+.landing-compact{--soil:#131010;--cream:#f4efe6;--paper:#1d1917;--bark:#b7aa98;--line:#433930;--moss:#d67a3a;--leaf:#f5c518;--clay:#d67a3a;background:var(--soil);color:var(--cream);background-image:none}
+.landing-compact .lp-nav{background:#131010ed;border-color:var(--line)}
+.landing-compact .lp-logo{color:var(--cream)}
+.landing-compact .lp-nav-trust,.landing-compact .lp-eyebrow,.landing-compact em{color:var(--clay)}
+.landing-compact .lp-lede,.landing-compact .lp-sectionlead,.landing-compact .lp-hint,.landing-compact .lp-footnote,.landing-compact .lp-formmeta{color:var(--bark)}
+.landing-compact .lp-formcard{background:var(--paper);border:1px solid var(--line);border-radius:16px;box-shadow:0 28px 90px -30px #000;transform:none}
+.landing-compact .lp-formcard input,.landing-compact .lp-formcard select{background:#fdf9f1;color:#1c1714;border-color:#786555}
+.landing-compact .lp-button{background:var(--clay);color:#fffaf3!important;border-radius:9px;box-shadow:none}
+.landing-compact .lp-button:hover{background:#b85e29}
+.landing-compact .lp-free-badge{background:#33240f;border:1px solid #73551a;border-radius:12px;box-shadow:none}
+.landing-compact .lp-free-badge strong{color:var(--leaf)}
+.landing-compact .lp-free-badge span{color:#d4c5ac}
+.landing-compact .lp-live-badge{background:#26352a;border:1px solid #4d7854;border-radius:12px}
+.landing-compact .lp-section{border-color:var(--line)}
+.landing-compact .lp-tile,.landing-compact .lp-intent-card,.landing-compact .lp-video-card,.landing-compact .lp-work-card{border-color:var(--line);border-radius:12px;box-shadow:none}
+.landing-compact .lp-tile{background:var(--paper)}
+.landing-compact .lp-intent-card{background:#241d18;color:var(--cream)}
+.landing-compact .lp-intent-card strong{color:var(--cream)}
+.landing-compact .lp-intent-card p,.landing-compact .lp-intent-card .lp-intent-link{color:var(--bark)}
+.landing-compact .lp-tile-icon{background:#33240f;color:var(--leaf);border-radius:12px}
+.landing-compact .lp-system-line span{background:#1d1917;color:var(--cream);border-color:var(--line);border-radius:999px}
+.landing-compact .lp-section-dark{background:#1d1917;border:1px solid #433930;border-radius:18px;margin:18px 0;padding:56px 48px}
+.landing-compact .lp-video-placeholder{background:radial-gradient(circle at 50% 30%,#4a3324,#241a16 70%);color:#e9c59c}
+.landing-compact .lp-repeat{background:#1d1917;border:1px solid #433930;border-radius:18px;box-shadow:none}
+@media(max-width:900px){.landing-compact .lp-hero{gap:36px}.landing-compact .lp-formcard{box-shadow:0 20px 60px -24px #000}}

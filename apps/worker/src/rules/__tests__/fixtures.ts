@@ -25,7 +25,7 @@ export function page(overrides: Partial<PageEvidence> = {}): PageEvidence {
     form: null,
     formCount: 0,
     perf: {
-      lcp: 1800, cls: 0.02, ttfb: 320, domContentLoaded: 900,
+      fcp: 1000, blockingTime: 40, lcp: 1800, cls: 0.02, ttfb: 320, domContentLoaded: 900,
       longTasks: 1, longTaskMs: 90, resourceCount: 30,
       imageBytes: 400_000, scriptBytes: 200_000, totalBytes: 900_000,
       imagesMissingDimensions: 0, imagesWithoutAlt: 0, renderBlockingResources: 2,

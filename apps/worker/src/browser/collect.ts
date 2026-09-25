@@ -1,3 +1,4 @@
+import { detectTracking, mergeTracking } from './tracking.js';
 import type { PageEvidence, PageRole, Viewport } from '@cro/shared';
 import { config } from '../config.js';
 import { pool } from './pool.js';
@@ -10,7 +11,7 @@ const EMPTY: CollectResult = {
   form: null,
   formCount: 0,
   perf: {
-    lcp: null, cls: null, ttfb: null, domContentLoaded: null,
+    fcp: null, blockingTime: null, lcp: null, cls: null, ttfb: null, domContentLoaded: null,
     longTasks: 0, longTaskMs: 0, resourceCount: 0,
     imageBytes: 0, scriptBytes: 0, totalBytes: 0,
     imagesMissingDimensions: 0, imagesWithoutAlt: 0, renderBlockingResources: 0,
@@ -90,6 +91,11 @@ export async function collectPage(opts: CollectOptions): Promise<PageEvidence> {
 
   try {
     await ctx.addInitScript(PERF_INIT_SCRIPT);
+    const requestSignals = new Set<string>();
+    // Context events include iframe and worker requests that top-level globals miss.
+    ctx.on('request', (request) => {
+      if (requestSignals.size < 5000) requestSignals.add(request.url());
+    });
     const page = await ctx.newPage();
 
     // Silence page errors — a broken third-party script is the target site's
@@ -126,8 +132,8 @@ export async function collectPage(opts: CollectOptions): Promise<PageEvidence> {
       page.waitForLoadState('load').catch(() => {}),
       sleep(navTimedOut ? 400 : config.settleMs),
     ]);
-    // One more tick so layout-shift observers flush.
-    await sleep(150);
+    // Allow asynchronous tags a bounded observation window after load.
+    await sleep(navTimedOut ? 150 : Math.max(150, Math.min(config.settleMs, 1500) - (Date.now() - navStart - navMs)));
 
     if (signal.aborted) {
       return { ...base, timing: { navMs, collectMs: 0 }, error: 'deadline exceeded during load' };
@@ -135,6 +141,12 @@ export async function collectPage(opts: CollectOptions): Promise<PageEvidence> {
 
     const collectStart = Date.now();
     const data = (await page.evaluate(collectFn)) as CollectResult;
+    const frameSignals = await Promise.all(page.frames().map((frame) => frame.evaluate(() =>
+      Array.from(document.querySelectorAll('script, iframe, img')).map((el) =>
+        [el.getAttribute('src'), el.getAttribute('data-src'), el.tagName === 'SCRIPT' ? el.textContent : ''].filter(Boolean).join(' ')
+      ).join('\n')
+    ).catch(() => '')));
+    data.tracking = mergeTracking(data.tracking, detectTracking([...requestSignals, ...frameSignals].join('\n')));
     const collectMs = Date.now() - collectStart;
 
     let screenshot: string | null = null;

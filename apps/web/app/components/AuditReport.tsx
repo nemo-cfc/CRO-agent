@@ -2,6 +2,7 @@
 import type { ReportState } from '@/lib/report-state';
 import { ROLE_LABELS } from '@cro/shared';
 import { Scorecard } from './Scorecard';
+import { PerformancePanel } from './PerformancePanel';
 import { ChecksPanel } from './ChecksPanel';
 import { Recommendations } from './Recommendations';
 import '../report.css';
@@ -18,7 +19,7 @@ export default function AuditReport({state,createdAt,partial}:{state:ReportState
  <Recommendations summary={state.summary} recommendations={state.recommendations} writing={false}/>
  {!state.recommendations.length&&<section className="panel"><h2>Start with the measured findings</h2><p>Written recommendations were unavailable for this run. Review the failed and warning checks below for the evidence we collected.</p></section>}
  <div className="mm-sectionlabel">02 / THE SCORE BREAKDOWN</div>{state.scorecard&&<Scorecard scorecard={state.scorecard}/>}
- <div className="mm-sectionlabel">03 / THE EVIDENCE</div>{state.checks.length>0&&<ChecksPanel checks={state.checks}/>}
+ <div className="mm-sectionlabel">03 / THE EVIDENCE</div>{state.checks.length>0&&<><PerformancePanel checks={state.checks}/><ChecksPanel checks={state.checks}/></>}
  {state.shots.length>0&&<section className="panel"><h2>A view of your storefront</h2><div className="shots">{state.shots.map(s=><figure className="shot" key={s.role+s.viewport}><figcaption>{ROLE_LABELS[s.role]} / {s.viewport}</figcaption><div className="mm-shot"><img src={s.dataUri} alt={ROLE_LABELS[s.role]+' on '+s.viewport}/><span aria-hidden="true">monkeyman</span></div></figure>)}</div></section>}
  <section className="panel mm-method"><h2>What this report covers</h2><p>This automated audit evaluates public-page signals. Scores are diagnostic indicators, not a prediction of revenue or a guarantee of conversion lift. Validate proposed changes through testing.</p><ul>{state.targets.map(t=><li key={t.url+t.role}><b>{ROLE_LABELS[t.role]}</b> <a href={t.url} target="_blank" rel="noopener noreferrer">{t.url}</a></li>)}</ul>{state.notes.map((n,i)=><p key={i}>{n}</p>)}</section>
  <footer className="mm-footer"><div className="mm-logo">monkey<span>man</span></div><p>Good stores keep growing.</p><a href="mailto:hello@monkeyman.agency">hello@monkeyman.agency</a></footer>

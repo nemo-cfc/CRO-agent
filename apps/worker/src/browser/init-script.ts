@@ -19,7 +19,7 @@ export const PERF_INIT_SCRIPT = `
     globalThis.__name = (fn) => fn;
   }
 
-  const state = { lcp: null, cls: 0, longTasks: 0, longTaskMs: 0 };
+  const state = { lcp: null, cls: 0, longTasks: 0, longTaskMs: 0, tasks: [], longTaskSupported: PerformanceObserver.supportedEntryTypes.includes("longtask") };
   Object.defineProperty(window, '__croPerf', { value: state, writable: false });
 
   try {
@@ -28,11 +28,20 @@ export const PERF_INIT_SCRIPT = `
     }).observe({ type: 'largest-contentful-paint', buffered: true });
   } catch {}
 
+  let shiftStart = 0, shiftLast = 0, shiftValue = 0;
   try {
     new PerformanceObserver((list) => {
       for (const e of list.getEntries()) {
         // Shifts within 500ms of a user interaction are not penalised by CWV.
-        if (!e.hadRecentInput) state.cls += e.value;
+        if (!e.hadRecentInput) {
+          if (e.startTime - shiftLast >= 1000 || e.startTime - shiftStart >= 5000) {
+            shiftStart = e.startTime;
+            shiftValue = 0;
+          }
+          shiftLast = e.startTime;
+          shiftValue += e.value;
+          state.cls = Math.max(state.cls, shiftValue);
+        }
       }
     }).observe({ type: 'layout-shift', buffered: true });
   } catch {}
@@ -40,6 +49,7 @@ export const PERF_INIT_SCRIPT = `
   try {
     new PerformanceObserver((list) => {
       for (const e of list.getEntries()) {
+        state.tasks.push({ startTime: e.startTime, duration: e.duration });
         state.longTasks += 1;
         state.longTaskMs += e.duration;
       }

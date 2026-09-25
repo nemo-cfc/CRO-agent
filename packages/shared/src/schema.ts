@@ -175,6 +175,10 @@ export const FormEvidenceSchema = z.object({
 export type FormEvidence = z.infer<typeof FormEvidenceSchema>;
 
 export const PerfEvidenceSchema = z.object({
+  /** First Contentful Paint, ms. */
+  fcp: z.number().nullable().default(null),
+  /** Blocking time after FCP until collection; not Lighthouse TBT. */
+  blockingTime: z.number().nullable().default(null),
   /** Largest Contentful Paint, ms. Null when the observer never fired. */
   lcp: z.number().nullable(),
   /** Cumulative Layout Shift, unitless. */

@@ -35,7 +35,8 @@ const AD_HOSTS = [
   'moatads.com',
 ];
 
-const BLOCKED_RESOURCE_TYPES = new Set(['font', 'media']);
+// Fonts affect FCP, LCP and layout shifts; allow them for performance measurement.
+const BLOCKED_RESOURCE_TYPES = new Set(['media']);
 
 function shouldAbort(url: string, resourceType: string): boolean {
   if (BLOCKED_RESOURCE_TYPES.has(resourceType)) return true;

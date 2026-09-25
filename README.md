@@ -73,6 +73,14 @@ Two caveats that matter more than the headline numbers:
 
 ## Layout
 
+### Tracking and performance reporting
+
+Tracking detection combines static scripts (including nested Shopify web-pixel configuration), runtime signals, frame scripts, and browser-context network requests across all successfully audited pages and viewports. Detected tags establish installation evidence, not verified event delivery. An inconclusive scan is unscored: consent gating, delayed scripts, first-party proxies and server-side tracking can hide a valid implementation. A tag manager or generic data layer alone does not establish GA4 installation.
+
+The report exposes FCP, LCP, CLS, TTFB and an estimated blocking time. INP is shown when origin-level mobile Chrome UX Report data is available (`CRUX_API_KEY` required). Missing measurements display as unavailable, not zero. These are short, unthrottled audit measurements, not a Lighthouse run or Lighthouse score; Speed Index is not measured. Fonts load normally; media and selected advertising resources remain filtered by the audit browser.
+
+FCP follows [Web Vitals thresholds](https://web.dev/articles/fcp). Blocking time counts the portion of each long task beyond 50ms after FCP, but ends at evidence collection rather than Lighthouse's TTI boundary ([TBT definition](https://web.dev/articles/tbt)). CLS uses the maximum session window. All lab values reflect only the observation window.
+
 ```
 packages/shared/       Zod schemas — the contract between worker and web
 apps/worker/

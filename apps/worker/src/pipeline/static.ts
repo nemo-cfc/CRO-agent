@@ -1,3 +1,4 @@
+import { detectTracking } from '../browser/tracking.js';
 import * as cheerio from 'cheerio';
 import type { Platform, StaticEvidence, TrackingEvidence } from '@cro/shared';
 import { config } from '../config.js';
@@ -108,20 +109,11 @@ export async function fetchStatic(
     // Cross-check tracking against script srcs. More robust than DOM globals
     // alone, which can be defeated by consent gating that defers the loader.
     const scripts = $('script')
-      .map((_, el) => `${$(el).attr('src') ?? ''} ${$(el).html()?.slice(0, 2000) ?? ''}`)
+      .map((_, el) => `${$(el).attr('src') ?? ''} ${$(el).attr('data-src') ?? ''} ${$(el).html() ?? ''}`)
       .get()
       .join(' ');
 
-    const trackingFromHtml: Partial<TrackingEvidence> = {
-      ga4: /gtag\/js|google-analytics\.com|googletagmanager\.com\/gtag/i.test(scripts),
-      gtm: /googletagmanager\.com\/gtm\.js|GTM-[A-Z0-9]+/i.test(scripts),
-      metaPixel: /connect\.facebook\.net|fbq\(/i.test(scripts),
-      clarity: /clarity\.ms/i.test(scripts),
-      hotjar: /static\.hotjar\.com|hjid/i.test(scripts),
-      hubspot: /js\.hs-scripts\.com|hs-analytics/i.test(scripts),
-      segment: /cdn\.segment\.com/i.test(scripts),
-      plausible: /plausible\.io/i.test(scripts),
-    };
+    const trackingFromHtml = detectTracking(scripts);
 
     const evidence: StaticEvidence = {
       url,

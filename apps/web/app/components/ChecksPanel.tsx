@@ -82,11 +82,11 @@ export function ChecksPanel({ checks }: { checks: Check[] }) {
         </div>
       ))}
 
-      {passed.length > 0 && (
+      {(passed.length > 0 || notApplicable.length > 0) && (
         <details className="passed">
           <summary>
             {passed.length} check{passed.length === 1 ? '' : 's'} passed
-            {notApplicable.length > 0 && ` · ${notApplicable.length} not applicable`}
+            {notApplicable.length > 0 && ` · ${notApplicable.length} not assessed / not applicable`}
           </summary>
           <ul className="checks" style={{ marginTop: 10 }}>
             {passed.map((c) => (

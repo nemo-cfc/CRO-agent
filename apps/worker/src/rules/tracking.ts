@@ -1,3 +1,4 @@
+import { mergeTracking } from '../browser/tracking.js';
 import type { Check, TrackingEvidence } from '@cro/shared';
 import { check, type RuleContext } from './util.js';
 
@@ -6,12 +7,9 @@ import { check, type RuleContext } from './util.js';
  * it: a site with no analytics cannot tell whether any of these fixes worked.
  */
 export function trackingRules(ctx: RuleContext): Check[] {
-  const t: TrackingEvidence = ctx.home?.tracking ?? {
-    ga4: false, gtm: false, metaPixel: false, clarity: false, hotjar: false,
-    hubspot: false, segment: false, plausible: false, other: [],
-  };
+  const t: TrackingEvidence = mergeTracking(...ctx.evidence.pages.filter((p) => p.ok).map((p) => p.tracking));
 
-  const analytics = t.ga4 || t.plausible || t.segment || t.hubspot;
+  const analytics = t.ga4 || t.plausible || t.segment || t.hubspot || t.other.length > 0;
   const behaviour = t.clarity || t.hotjar;
   const adPixel = t.metaPixel;
 
@@ -24,50 +22,55 @@ export function trackingRules(ctx: RuleContext): Check[] {
     t.hubspot && 'HubSpot',
     t.segment && 'Segment',
     t.plausible && 'Plausible',
+    ...t.other,
   ].filter(Boolean) as string[];
 
   return [
     check({
       id: 'tracking.analytics',
       category: 'tracking',
-      title: 'Traffic is being measured',
-      status: analytics ? 'pass' : 'fail',
+      scope: 'site',
+      title: 'Analytics installation signals',
+      status: analytics ? 'pass' : 'na',
       weight: 1.5,
       detail: analytics
-        ? `Analytics detected: ${named.join(', ')}.`
-        : 'No analytics platform detected. Without a baseline, none of the changes in this report can be proven to have worked.',
+        ? `Installation signals detected: ${named.join(', ')}. Event delivery and configuration were not verified.`
+        : 'Analytics could not be confirmed during this short, consent-free visit. Consent gating, delayed loading, first-party proxies or server-side tracking may hide an existing installation. Verify in your analytics platform; this is not scored as missing tracking.',
       evidence: { detected: named.join(', ') },
     }),
     check({
       id: 'tracking.tagManager',
       category: 'tracking',
+      scope: 'site',
       title: 'Tags can be changed without a deploy',
-      status: t.gtm ? 'pass' : 'warn',
+      status: t.gtm ? 'pass' : 'na',
       weight: 0.5,
       detail: t.gtm
         ? 'Google Tag Manager is installed, so conversion events can be added without touching the codebase.'
-        : 'No tag manager. Every new conversion event needs a developer and a deploy, which in practice means the events never get added.',
+        : 'No supported tag-manager signal observed. Tags may be deployed directly or through another manager; this does not establish that tracking is absent.',
       evidence: { gtm: t.gtm },
     }),
     check({
       id: 'tracking.behaviour',
       category: 'tracking',
+      scope: 'site',
       title: 'Visitor behaviour is observable',
-      status: behaviour ? 'pass' : 'warn',
+      status: behaviour ? 'pass' : 'na',
       weight: 0.75,
       detail: behaviour
         ? `Session recording or heatmapping is installed (${[t.clarity && 'Clarity', t.hotjar && 'Hotjar'].filter(Boolean).join(', ')}).`
-        : 'No session recording or heatmap tool. Microsoft Clarity is free and would show exactly where visitors abandon the pages in this report.',
+        : 'No supported session-recording or heatmap signal observed during this visit. Consent or delayed loading can hide an existing installation.',
       evidence: { clarity: t.clarity, hotjar: t.hotjar },
     }),
     check({
       id: 'tracking.adPixel',
       category: 'tracking',
+      scope: 'site',
       title: 'Paid traffic can be attributed',
       status: adPixel ? 'pass' : 'na',
       weight: adPixel ? 0.5 : 0,
       detail: adPixel
-        ? 'Meta Pixel is present, so paid social conversions can be attributed.'
+        ? 'Meta Pixel installation signals detected. Conversion events and delivery were not verified.'
         : 'No advertising pixel detected. Only relevant if paid acquisition is running — not counted against the score.',
       evidence: { metaPixel: t.metaPixel },
     }),

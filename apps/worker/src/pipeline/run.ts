@@ -1,3 +1,4 @@
+import { mergeTracking } from '../browser/tracking.js';
 import type { AuditEvent, AuditEvidence, PageEvidence, TrackingEvidence } from '@cro/shared';
 import { PLATFORM_LABELS, isStore } from '@cro/shared';
 import { config } from '../config.js';
@@ -161,8 +162,7 @@ export async function runAudit(url: string, emit: Emit): Promise<void> {
 
     // Cross-check tracking: DOM globals miss loaders deferred behind consent,
     // the HTML scan misses tags injected at runtime. Union of the two.
-    const domTracking = loaded.find((p) => p.role === 'home')?.tracking ?? null;
-    const tracking = mergeTracking(domTracking, staticResult?.trackingFromHtml);
+    const tracking = mergeTracking(...loaded.map((p) => p.tracking), staticResult?.trackingFromHtml);
     for (const p of pages) if (tracking) p.tracking = tracking;
 
     const evidence: AuditEvidence = {
@@ -242,27 +242,4 @@ function phaseEvent(
   at: number,
 ): AuditEvent {
   return { type: 'phase', phase: p, label, at };
-}
-
-function mergeTracking(
-  dom: TrackingEvidence | null,
-  html: Partial<TrackingEvidence> | undefined,
-): TrackingEvidence | null {
-  if (!dom && !html) return null;
-  const base: TrackingEvidence = dom ?? {
-    ga4: false, gtm: false, metaPixel: false, clarity: false, hotjar: false,
-    hubspot: false, segment: false, plausible: false, other: [],
-  };
-  if (!html) return base;
-  return {
-    ga4: base.ga4 || !!html.ga4,
-    gtm: base.gtm || !!html.gtm,
-    metaPixel: base.metaPixel || !!html.metaPixel,
-    clarity: base.clarity || !!html.clarity,
-    hotjar: base.hotjar || !!html.hotjar,
-    hubspot: base.hubspot || !!html.hubspot,
-    segment: base.segment || !!html.segment,
-    plausible: base.plausible || !!html.plausible,
-    other: base.other,
-  };
 }

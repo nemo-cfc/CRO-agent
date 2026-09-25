@@ -12,20 +12,36 @@ export function speedRules(ctx: RuleContext): Check[] {
   const crux = ctx.evidence.crux;
   const out: Check[] = [];
 
+  const labSource = page.viewport + ' audit load (unthrottled, bounded observation)';
+  out.push(p.fcp != null
+    ? check({ id: 'speed.fcp', category: 'speed', title: 'First Contentful Paint (FCP)',
+        status: gradeBelow(p.fcp, 1800, 3000),
+        detail: `First Contentful Paint is ${ms(p.fcp)} for this ${labSource}.`,
+        evidence: { fcpMs: Math.round(p.fcp), source: labSource } })
+    : skipped('speed.fcp', 'speed', 'First Contentful Paint (FCP)', 'First paint was not observed.'));
+
+  const inp = crux?.available ? crux.inpP75 : null;
+  out.push(inp != null
+    ? check({ id: 'speed.inp', category: 'speed', title: 'Interaction to Next Paint (INP)',
+        status: gradeBelow(inp, 200, 500),
+        detail: `Real-user INP is ${ms(inp)} at the 75th percentile (Chrome UX Report).`,
+        evidence: { inpMs: Math.round(inp), source: 'Chrome UX Report, origin-level mobile real visitors (75th percentile)' } })
+    : skipped('speed.inp', 'speed', 'Interaction to Next Paint (INP)', 'Real-user data unavailable. A passive page load cannot measure INP.'));
+
   /* LCP — field data preferred over our single lab load ------------- */
   const lcpField = crux?.available ? crux.lcpP75 : null;
   const lcp = lcpField ?? p.lcp;
-  const lcpSource = lcpField !== null ? 'real visitors (75th percentile)' : 'this test load';
+  const lcpSource = lcpField !== null ? 'origin-level mobile real visitors (75th percentile)' : labSource;
 
   out.push(
     lcp !== null
       ? check({
           id: 'speed.lcp',
           category: 'speed',
-          title: 'Main content appears quickly',
+          title: 'Largest Contentful Paint (LCP)',
           status: gradeBelow(lcp, 2500, 4000),
           weight: 1.5,
-          detail: `Largest Contentful Paint is ${ms(lcp)} for ${lcpSource}. Google treats 2.5s as good and 4s as poor; every extra second past 2s costs conversions.`,
+          detail: `Largest Contentful Paint is ${ms(lcp)} for ${lcpSource}. The good threshold is 2.5s; above 4s is poor.`,
           evidence: { lcpMs: Math.round(lcp), source: lcpSource },
         })
       : skipped('speed.lcp', 'speed', 'Main content appears quickly', 'Largest Contentful Paint could not be measured.'),
@@ -43,7 +59,7 @@ export function speedRules(ctx: RuleContext): Check[] {
           status: gradeBelow(cls, 0.1, 0.25),
           weight: 1.25,
           detail: `Cumulative Layout Shift is ${cls.toFixed(3)}. Above 0.1 the page visibly moves under the visitor's thumb, which is how mis-taps and rage-quits happen.`,
-          evidence: { cls: Number(cls.toFixed(3)) },
+          evidence: { cls: Number(cls.toFixed(3)), source: clsField !== null ? 'Chrome UX Report, origin-level mobile real visitors (75th percentile)' : labSource },
         })
       : skipped('speed.cls', 'speed', 'Layout does not jump while loading', 'Layout shift could not be measured.'),
   );
@@ -58,22 +74,18 @@ export function speedRules(ctx: RuleContext): Check[] {
           title: 'Server responds promptly',
           status: gradeBelow(ttfb, 800, 1800),
           detail: `Time to first byte is ${ms(ttfb)}. Everything else on the page is stuck waiting behind this number.`,
-          evidence: { ttfbMs: Math.round(ttfb) },
+          evidence: { ttfbMs: Math.round(ttfb), source: p.ttfb !== null ? labSource : 'Static HTML request' },
         })
       : skipped('speed.ttfb', 'speed', 'Server responds promptly', 'Server timing was not available.'),
   );
 
-  /* Main-thread blocking ------------------------------------------- */
-  out.push(
-    check({
-      id: 'speed.blocking',
-      category: 'speed',
-      title: 'Page stays responsive while loading',
-      status: gradeBelow(p.longTaskMs, 300, 900),
-      detail: `${p.longTasks} long task${p.longTasks === 1 ? '' : 's'} totalling ${Math.round(p.longTaskMs)}ms blocked the main thread. During those, taps and scrolls do nothing.`,
-      evidence: { longTasks: p.longTasks, longTaskMs: Math.round(p.longTaskMs) },
-    }),
-  );
+  /* Blocking measured from FCP to collection, not Lighthouse's TTI window. */
+  out.push(p.blockingTime != null
+    ? check({ id: 'speed.blocking', category: 'speed', title: 'Total Blocking Time (estimate)',
+        status: gradeBelow(p.blockingTime, 200, 600),
+        detail: `${Math.round(p.blockingTime)}ms of blocking observed after FCP. Counts only the portion of each task beyond 50ms, ending at collection rather than Lighthouse's Time to Interactive.`,
+        evidence: { blockingTimeMs: Math.round(p.blockingTime), source: labSource } })
+    : skipped('speed.blocking', 'speed', 'Total Blocking Time (estimate)', 'First paint or long-task observation unavailable.'));
 
   /* Images without dimensions -------------------------------------- */
   out.push(

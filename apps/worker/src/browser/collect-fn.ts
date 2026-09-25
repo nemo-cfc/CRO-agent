@@ -192,10 +192,14 @@ export function collectFn(): CollectResult {
    * Performance
    * ---------------------------------------------------------------- */
 
-  const perfState = (window as unknown as { __croPerf?: { lcp: number | null; cls: number; longTasks: number; longTaskMs: number } }).__croPerf;
+  const perfState = (window as unknown as { __croPerf?: { lcp: number | null; cls: number; longTasks: number; longTaskMs: number; tasks: { startTime: number; duration: number }[]; longTaskSupported: boolean } }).__croPerf;
   const nav = performance.getEntriesByType('navigation')[0] as
     | PerformanceNavigationTiming
     | undefined;
+  const fcp = performance.getEntriesByName('first-contentful-paint')[0]?.startTime ?? null;
+  const blockingTime = fcp !== null && perfState?.longTaskSupported
+    ? perfState.tasks.reduce((sum, task) => sum + Math.max(0, task.startTime + task.duration - Math.max(task.startTime + 50, fcp)), 0)
+    : null;
   const resources = performance.getEntriesByType('resource') as PerformanceResourceTiming[];
 
   const bytesFor = (types: string[]) =>
@@ -390,13 +394,13 @@ export function collectFn(): CollectResult {
 
   const w = window as unknown as Record<string, unknown>;
   const tracking = {
-    ga4: typeof w['gtag'] === 'function' || Array.isArray(w['dataLayer']),
-    gtm: Array.isArray(w['dataLayer']) && !!document.querySelector('script[src*="googletagmanager"]'),
+    ga4: Array.isArray(w['dataLayer']) && w['dataLayer'].some((entry: unknown) => { const command = entry as { 0?: unknown; 1?: unknown } | null; return command?.[0] === 'config' && typeof command[1] === 'string' && /^G-[A-Z0-9]+$/i.test(command[1]); }),
+    gtm: !!w['google_tag_manager'] || !!document.querySelector('script[src*="/gtm.js"]'),
     metaPixel: typeof w['fbq'] === 'function',
     clarity: typeof w['clarity'] === 'function',
     hotjar: typeof w['hj'] === 'function',
     hubspot: Array.isArray(w['_hsq']),
-    segment: typeof w['analytics'] === 'object' && w['analytics'] !== null,
+    segment: !!w['analytics'] && typeof (w['analytics'] as Record<string, unknown>)['initialize'] === 'function',
     plausible: typeof w['plausible'] === 'function',
     other: [] as string[],
   };
@@ -656,6 +660,8 @@ export function collectFn(): CollectResult {
     form: primaryForm,
     formCount: formEls.length,
     perf: {
+      fcp,
+      blockingTime,
       lcp: perfState?.lcp ?? null,
       cls: perfState ? Math.round(perfState.cls * 1000) / 1000 : null,
       ttfb: nav ? Math.round(nav.responseStart) : null,
@@ -743,6 +749,8 @@ export interface CollectResult {
   } | null;
   formCount: number;
   perf: {
+    fcp: number | null;
+    blockingTime: number | null;
     lcp: number | null;
     cls: number | null;
     ttfb: number | null;

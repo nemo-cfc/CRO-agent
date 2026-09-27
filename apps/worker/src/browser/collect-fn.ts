@@ -294,6 +294,7 @@ export function collectFn(): CollectResult {
 
   const smallTextNodes = Array.from(document.querySelectorAll('p, li, span, div, a, td'))
     .filter((el) => {
+      if (!visible(el) || el.closest('[aria-hidden="true"], [inert]')) return false;
       if (!el.firstChild || el.firstChild.nodeType !== Node.TEXT_NODE) return false;
       const t = text(el);
       if (t.length < 12) return false;

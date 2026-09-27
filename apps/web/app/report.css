@@ -30,3 +30,6 @@
 .mm-report .mm-footer{border-color:var(--line)}
 .mm-report .mm-watermark{color:#d67a3a12}
 .mm-report a{color:#f5c518}
+.diagnostic-preview{max-height:340px;overflow:hidden;filter:blur(8px);user-select:none;pointer-events:none;opacity:.45}.diagnostic-row{padding:18px;border-bottom:1px solid var(--line)}.complete-audit-booking{position:relative;margin-top:-70px;padding:26px;background:var(--panel);border:1px solid var(--line);border-radius:12px}.complete-audit-link{display:inline-block;padding:13px 20px;border-radius:8px;background:#d67a3a;color:#131010!important;font-weight:700}.review-note{font-size:13px;color:var(--muted);line-height:1.6}.mm-seal>span{letter-spacing:.05em}@media print{.diagnostic-preview{display:none}}
+
+.mm-report .mm-seal.score-yellow{background:#e6bb48;color:#29200c}.mm-report .mm-seal.score-yellow>span,.mm-report .mm-seal.score-yellow small,.mm-report .mm-seal.score-yellow p{color:#382b0d}.mm-report .mm-seal.score-pending{background:#555}.mm-report .mm-stats{grid-template-columns:repeat(3,minmax(0,1fr))}

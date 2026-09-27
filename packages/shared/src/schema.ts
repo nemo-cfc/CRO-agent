@@ -301,7 +301,21 @@ export const EcommerceEvidenceSchema = z.object({
 export type EcommerceEvidence = z.infer<typeof EcommerceEvidenceSchema>;
 
 /** Everything one `page.evaluate` returns for a single page at a single viewport. */
+export const VisualObservationSchema = z.object({
+  kind: z.enum(['small-text', 'low-contrast', 'generic-action', 'first-view-overlay']),
+  text: z.string(), selector: z.string(),
+  x: z.number(), y: z.number(), width: z.number(), height: z.number(),
+  viewportWidth: z.number(), viewportHeight: z.number(), fontSize: z.number(),
+  coverage: z.number().optional(),
+  contrast: z.number().optional(), contrastThreshold: z.number().optional(),
+});
+export type VisualObservation = z.infer<typeof VisualObservationSchema>;
+
 export const PageEvidenceSchema = z.object({
+  duplicateScripts: z.array(z.object({provider:z.enum(['Meta','Google Ads / Analytics','Google Tag Manager']),source:z.string(),count:z.number().int().min(2)})).optional(),
+  repeatedEvents: z.array(z.object({ provider: z.enum(['Meta','Google Ads']), tagId:z.string(), eventName:z.string(),endpoint:z.string(),count:z.number().int().min(2),intervalMs:z.number() })).optional(),
+  /** Repeated, unobscured observations. Absent in reports made before visible-v1. */
+  visualObservations: z.array(VisualObservationSchema).optional(),
   url: z.string(),
   finalUrl: z.string(),
   role: PageRoleSchema,

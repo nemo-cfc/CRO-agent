@@ -1,4 +1,4 @@
-import { put } from '@vercel/blob';
+import { savePrivateRecord } from '@/lib/private-store';
 import { randomUUID } from 'node:crypto';
 import { validateLead } from '@/lib/lead';
 export const runtime='nodejs';
@@ -13,7 +13,7 @@ export async function POST(request:Request) {
  try {
   const id=randomUUID();
   const route=lead.gmv==='100k-plus'||lead.intent==='plus'?'priority':lead.gmv==='under-5k'||lead.budget==='exploring'?'nurture':'standard';
-  await put('leads/'+id+'.json',JSON.stringify({id,createdAt:new Date().toISOString(),magnet:'cro',route,...lead},null,2),{access:'private',addRandomSuffix:false,allowOverwrite:true});
+  await savePrivateRecord('leads',id,{id,createdAt:new Date().toISOString(),magnet:'cro',route,...lead});
   return Response.json({id,url:lead.storeUrl},{status:201,headers:{'Cache-Control':'no-store'}});
  } catch { return Response.json({error:'We could not save your details. Please try again.'},{status:500}); }
 }

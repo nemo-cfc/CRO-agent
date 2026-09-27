@@ -3,9 +3,7 @@
 import { CATEGORY_LABELS, type Scorecard as ScorecardType } from '@cro/shared';
 
 function colorFor(score: number): string {
-  if (score >= 80) return 'var(--pass)';
-  if (score >= 55) return 'var(--warn)';
-  return 'var(--fail)';
+  return score >= 90 ? 'var(--pass)' : 'var(--warn)';
 }
 
 export function Scorecard({ scorecard }: { scorecard: ScorecardType }) {

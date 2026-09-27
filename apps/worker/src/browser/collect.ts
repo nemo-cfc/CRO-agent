@@ -1,3 +1,6 @@
+import { collectDuplicateScripts } from './duplicate-scripts.js';
+import { parseEventReceipt, repeatedEvents, type EventReceipt } from './duplicate-events.js';
+import { collectVisualObservations, stableVisualObservations } from './visual.js';
 import { detectTracking, mergeTracking } from './tracking.js';
 import type { PageEvidence, PageRole, Viewport } from '@cro/shared';
 import { config } from '../config.js';
@@ -97,6 +100,20 @@ export async function collectPage(opts: CollectOptions): Promise<PageEvidence> {
       if (requestSignals.size < 5000) requestSignals.add(request.url());
     });
     const page = await ctx.newPage();
+    let navigation = 0;
+    const eventReceipts: EventReceipt[] = [];
+    const requestNavigation = new WeakMap<object, number>();
+    page.on('framenavigated', frame => { if(frame === page.mainFrame()) navigation++; });
+    page.on('request', request => requestNavigation.set(request, navigation));
+    page.on('response', response => {
+      if(eventReceipts.length >= 200 || response.status()<200 || response.status()>=300 || response.fromServiceWorker())return;
+      const request=response.request();
+      try {
+        if(request.frame() !== page.mainFrame() || request.redirectedFrom())return;
+        const event=parseEventReceipt(request.url(),request.postData(),request.timing().startTime,requestNavigation.get(request)??navigation);
+        if(event)eventReceipts.push(event);
+      } catch { /* Requests without a frame are not comparable. */ }
+    });
 
     // Silence page errors — a broken third-party script is the target site's
     // problem, not a reason to fail the audit.
@@ -147,6 +164,13 @@ export async function collectPage(opts: CollectOptions): Promise<PageEvidence> {
       ).join('\n')
     ).catch(() => '')));
     data.tracking = mergeTracking(data.tracking, detectTracking([...requestSignals, ...frameSignals].join('\n')));
+    const firstScripts = await page.evaluate(collectDuplicateScripts).catch(() => []);
+    const firstVisual = await page.evaluate(collectVisualObservations).catch(() => []);
+    await sleep(200);
+    const secondVisual = signal.aborted ? [] : await page.evaluate(collectVisualObservations).catch(() => []);
+    const secondScripts = signal.aborted ? [] : await page.evaluate(collectDuplicateScripts).catch(() => []);
+    const duplicateScripts = secondScripts.filter(b => firstScripts.some(a => a.provider === b.provider && a.source === b.source && a.count === b.count));
+    const visualObservations = stableVisualObservations(firstVisual, secondVisual);
     const collectMs = Date.now() - collectStart;
 
     let screenshot: string | null = null;
@@ -180,6 +204,9 @@ export async function collectPage(opts: CollectOptions): Promise<PageEvidence> {
       error,
       timing: { navMs, collectMs },
       ...data,
+      visualObservations,
+      duplicateScripts,
+      repeatedEvents: repeatedEvents(eventReceipts),
       screenshot,
     };
   } catch (err) {

@@ -1,3 +1,5 @@
+import { observedTrackingRules, duplicateScriptRules } from './observed-tracking.js';
+import { visualRules } from './visual.js';
 import type { AuditEvidence, Check, Scorecard } from '@cro/shared';
 import { buildContext } from './util.js';
 import { aboveFoldRules } from './above-fold.js';
@@ -25,6 +27,9 @@ const RULES = [
   trackingRules,
   frictionRules,
   ecommerceRules,
+  visualRules,
+  observedTrackingRules,
+  duplicateScriptRules,
 ];
 
 /**

@@ -16,12 +16,12 @@ export const RECOMMENDATIONS_JSON_SCHEMA = {
     summary: {
       type: 'string',
       description:
-        'Two or three sentences for the site owner: the single biggest conversion problem on this page and what it is costing them. Plain language, no jargon, no preamble.',
+        'A short scope-limited summary of directly observed findings. Never claim measured conversion losses.',
     },
     recommendations: {
       type: 'array',
       description:
-        'Between 5 and 10 recommendations, ordered most impactful first. Every one must be grounded in a check that actually failed or warned — never invent a problem the evidence does not show.',
+        'Zero to five recommendations, ordered by strength of supplied evidence. Every one must be grounded in a check that actually failed or warned — never invent a problem the evidence does not show.',
       items: {
         type: 'object',
         properties: {
@@ -38,7 +38,7 @@ export const RECOMMENDATIONS_JSON_SCHEMA = {
           impact: {
             type: 'string',
             enum: ['high', 'medium', 'low'],
-            description: 'Expected effect on conversion rate if fixed.',
+            description: 'Conservative prioritization estimate, not measured conversion lift.',
           },
           effort: {
             type: 'string',

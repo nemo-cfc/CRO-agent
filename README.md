@@ -143,3 +143,13 @@ apps/web/              Next.js frontend, SSE consumer
 The homepage collects store URL, intent, monthly sales, budget, timing, name, email, and optional phone before opening the automated report. Submissions are saved as individual JSON files in `apps/web/data/leads/` (excluded from Git). There is no public endpoint for listing leads. Email delivery and CRM sync are not configured. Back up this directory separately if you need to retain enquiries.
 
 Completed audits are saved in `apps/web/data/reports/`. The landing page polls for completion and opens `/reports/<random-id>` in a new tab. Report links grant access to their report; lead contact details are not included. Keep the local app and worker running for background audits.
+
+## Evidence-led instant review
+
+The public report publishes only stable initial-view observations and narrowly verified tracking patterns. The model ranks approved observations; factual wording is constructed from the captured evidence. Zero recommendations is an allowed outcome. Missing analytics, unopened cart drawers and unobserved checkout behavior are not public findings. Duplicate loader references may cause extra requests; repeated browser requests do not establish duplicate counted conversions.
+
+Technical diagnostics remain in the provisional score and are blurred in the preview. This is presentation, not a secure paywall. Green means 90–100; every score below 90 is yellow. The numerical scoring formula is unchanged and scores are not adjusted to achieve a sales target. Saved reports without the new evidence require a fresh audit for visible findings.
+
+The browser stack remains Playwright and Chromium. No extra browser engine, simulator or Lighthouse navigation was added to the instant path. Visual collection is bounded and sampled twice, 200ms apart. A representative end-to-end benchmark is still required before claiming any percentage latency change; retain the existing stack unless an alternative demonstrates no more than 10% added delivery time.
+
+Method references: [NN/g heuristic evaluation](https://www.nngroup.com/articles/how-to-conduct-a-heuristic-evaluation/), [Baymard checkout research](https://baymard.com/research/checkout-usability), [WCAG contrast](https://www.w3.org/WAI/WCAG21/Understanding/contrast-minimum), [WCAG target-size exceptions](https://www.w3.org/WAI/WCAG22/Understanding/target-size-minimum.html), and [Playwright emulation](https://playwright.dev/docs/emulation). These guide observations and scope; they do not prove conversion losses for a particular store.

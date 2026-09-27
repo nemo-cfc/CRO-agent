@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { put } from '@vercel/blob';
+import { savePrivateRecord } from '@/lib/private-store';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { validateReportLead } from '@/lib/lead';
 import { readReport } from '@/lib/report-store';
@@ -13,8 +13,8 @@ export async function POST(request:Request,{params}:{params:Promise<{id:string}>
  catch(e){return NextResponse.json({error:e instanceof Error?e.message:'Complete all fields.'},{status:400});}
  try{
  const leadId=randomUUID(),token=randomBytes(32).toString('hex'),hash=digest(token),expiresAt=Date.now()+7*86400000;
- await put('leads/'+leadId+'.json',JSON.stringify({id:leadId,reportId:id,createdAt:new Date().toISOString(),...lead},null,2),{access:'private',addRandomSuffix:false,allowOverwrite:true});
- await put('grants/'+hash+'.json',JSON.stringify({hash,reportId:id,leadId,expiresAt}),{access:'private',addRandomSuffix:false,allowOverwrite:true});
+ await savePrivateRecord('leads',leadId,{id:leadId,reportId:id,createdAt:new Date().toISOString(),...lead});
+ await savePrivateRecord('grants',hash,{hash,reportId:id,leadId,expiresAt});
  const response=NextResponse.json({ok:true},{headers:{'Cache-Control':'private, no-store'}});
  response.cookies.set(cookieName(id),token,{httpOnly:true,sameSite:'strict',secure:new URL(request.url).protocol==='https:',maxAge:7*86400,path:'/'});return response;
  }catch{return NextResponse.json({error:'We could not save your details. Please try again.'},{status:500});}

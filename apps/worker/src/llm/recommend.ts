@@ -1,3 +1,5 @@
+import { isPublishableFinding, visibleSummary } from '@cro/shared';
+import { groundedRecommendation } from './publication.js';
 import Groq from 'groq-sdk';
 import {
   RECOMMENDATIONS_JSON_SCHEMA,
@@ -45,6 +47,8 @@ export async function writeRecommendations(
   signal: AbortSignal,
   cb: RecommendCallbacks,
 ): Promise<RecommendResult> {
+  cb.onSummary(visibleSummary(checks));
+  if (!checks.some(isPublishableFinding)) return { ok: true, count: 0, note: null, usage: null };
   if (!config.groqApiKey) {
     return {
       ok: false,
@@ -57,7 +61,13 @@ export async function writeRecommendations(
   const packet = buildEvidencePacket(evidence, checks, scorecard);
   const extractor = new StreamingJsonExtractor();
   let index = 0;
-  let emittedSummary = false;
+  const emitted = new Set<string>();
+  const publish = (candidate: Recommendation) => {
+    const rec = groundedRecommendation(candidate, checks);
+    if (!rec || index >= 5 || rec.evidence_refs.some(id => emitted.has(id))) return;
+    rec.evidence_refs.forEach(id => emitted.add(id));
+    cb.onRecommendation(rec, index++);
+  };
 
   try {
     const stream = await getClient().chat.completions.create({
@@ -81,14 +91,11 @@ export async function writeRecommendations(
       const delta = choice?.delta?.content ?? '';
       const { summary, recommendations } = extractor.push(delta);
 
-      if (summary && !emittedSummary) {
-        emittedSummary = true;
-        cb.onSummary(summary);
-      }
+      // Unvalidated model summaries are never published.
 
       for (const raw of recommendations) {
         const parsed = RecommendationSchema.safeParse(raw);
-        if (parsed.success) cb.onRecommendation(parsed.data, index++);
+        if (parsed.success) publish(parsed.data);
       }
     }
 
@@ -106,8 +113,8 @@ export async function writeRecommendations(
     if (index === 0) {
       const whole = RecommendationsPayloadSchema.safeParse(safeJson(extractor.raw));
       if (whole.success) {
-        if (!emittedSummary) cb.onSummary(whole.data.summary);
-        whole.data.recommendations.forEach((r) => cb.onRecommendation(r, index++));
+
+        whole.data.recommendations.forEach(publish);
       }
     }
 

@@ -15,7 +15,7 @@ export function Recommendations({
 
   return (
     <section className="panel">
-      <h2>What to change</h2>
+      <h2>Suggested priorities</h2>
 
       {summary ? (
         <div className="summaryBox">{summary}</div>
@@ -33,9 +33,7 @@ export function Recommendations({
           <li className="rec" key={`${r.title}-${i}`}>
             <div className="head">
               <h4>{r.title}</h4>
-              <span className={`tag ${r.severity}`}>{r.severity}</span>
-              <span className={`tag ${r.effort}`}>{r.effort.replace('-', ' ')}</span>
-              <span className="tag">{r.impact} impact</span>
+              <span className="tag">Evidence-led recommendation</span>
             </div>
             <p className="why">{r.why_it_matters}</p>
             <p className="fix">{r.fix}</p>

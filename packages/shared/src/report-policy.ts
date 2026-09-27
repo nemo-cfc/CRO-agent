@@ -16,8 +16,29 @@ export function isPublishableFinding(check: Check): boolean {
   return isVisibleFinding(check) || (check.id.startsWith('observed.duplicate-script.') && check.evidence.policy === 'script-v1' && check.evidence.confirmed === true && typeof check.evidence.count === 'number' && check.evidence.count >= 2 && typeof check.evidence.source === 'string' && typeof check.evidence.suggestion === 'string' && typeof check.evidence.url === 'string') || (check.id.startsWith('observed.repeated-event.') && check.evidence.policy === 'network-v1' && check.evidence.confirmed === true && typeof check.evidence.count === 'number' && check.evidence.count >= 2 && typeof check.evidence.url === 'string' && typeof check.evidence.suggestion === 'string');
 }
 
+/**
+ * Rule checks whose detection is known to be wrong on real stores. They stay
+ * in the diagnostics list but are never handed to the model as grounds for
+ * advice. Empty after the multi-store accuracy pass (Sept 2026): contrast,
+ * pop-up, grid, sort/filter, shipping/returns and option-count detection were
+ * fixed and re-verified on SKIMS, Allbirds, Death Wish, Bellroy, Ruggable and
+ * Bombay Shaving. Add an id here the moment a check is shown to be wrong.
+ */
+export const UNRELIABLE_CHECKS: ReadonlySet<string> = new Set([
+]);
+
+/**
+ * Whether the model may base a recommendation on this check: a vetted
+ * observation, or a failing/warning rule check that is not known-unreliable.
+ */
+export function isRecommendable(check: Check): boolean {
+  if (isPublishableFinding(check)) return true;
+  if (check.id.startsWith('visual.') || check.id.startsWith('observed.')) return false;
+  return (check.status === 'fail' || check.status === 'warn') && check.weight > 0 && !UNRELIABLE_CHECKS.has(check.id);
+}
+
 export function visibleRecommendations(recommendations: Recommendation[], checks: Check[]) {
-  const allowed = new Set(checks.filter(isPublishableFinding).map(c => c.id));
+  const allowed = new Set(checks.filter(isRecommendable).map(c => c.id));
   return recommendations.filter(r => r.evidence_refs.length > 0 && r.evidence_refs.every(id => allowed.has(id)));
 }
 

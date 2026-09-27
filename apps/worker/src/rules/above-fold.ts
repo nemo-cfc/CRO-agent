@@ -1,4 +1,5 @@
 import type { Check } from '@cro/shared';
+import { isStore } from '@cro/shared';
 import { check, skipped, type RuleContext } from './util.js';
 
 export function aboveFoldRules(ctx: RuleContext): Check[] {
@@ -45,7 +46,10 @@ export function aboveFoldRules(ctx: RuleContext): Check[] {
   );
 
   /* Supporting copy ------------------------------------------------ */
-  out.push(
+  // Landing-page advice: a SaaS or lead-gen hero needs a subheadline to carry
+  // the value proposition. A store homepage leads with campaign banners, where
+  // a bare collection name ("FALL COTTON") is the norm, not a gap.
+  if (!isStore(ctx.evidence.platform)) out.push(
     check({
       id: 'aboveFold.heroCopy',
       category: 'aboveFold',

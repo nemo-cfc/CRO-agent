@@ -2,7 +2,7 @@ import type { AuditTarget, Platform, StaticEvidence } from '@cro/shared';
 import { isStore } from '@cro/shared';
 import { config } from '../config.js';
 import { pickKeyPage } from './keypage.js';
-import { findProductInHtml, findStorePages } from './platform.js';
+import { findProductInHtml, findProductInSitemap, findStorePages } from './platform.js';
 
 /**
  * Decide which pages to audit.
@@ -52,6 +52,13 @@ export async function pickTargets(
     if (productUrl) notes.push('The product page was found via the collection page.');
   }
 
+  // Grids rendered client-side leave no product link in any HTML we fetch;
+  // the sitemap usually lists products.
+  if (!productUrl) {
+    productUrl = await fetchProductFromSitemap(platform, staticEvidence.finalUrl, signal);
+    if (productUrl) notes.push('The product page was found via the sitemap.');
+  }
+
   if (productUrl) {
     targets.push({
       url: productUrl,
@@ -64,7 +71,45 @@ export async function pickTargets(
     );
   }
 
-  return { targets, notes };
+  return { targets: targets.map((t) => ({ ...t, url: withoutTracking(t.url) })), notes };
+}
+
+/** Drop campaign parameters (utm_*, fbclid...) so reports show the clean page URL. */
+function withoutTracking(url: string): string {
+  try {
+    const u = new URL(url);
+    for (const key of [...u.searchParams.keys()]) {
+      if (/^(utm_|fbclid|gclid|mc_|_ga|ref$|srsltid)/i.test(key)) u.searchParams.delete(key);
+    }
+    return u.toString();
+  } catch {
+    return url;
+  }
+}
+
+/** One or two small fetches: /sitemap.xml, then a product sub-sitemap if it is an index. */
+async function fetchProductFromSitemap(platform: Platform, siteUrl: string, signal: AbortSignal): Promise<string | null> {
+  const controller = new AbortController();
+  const onAbort = () => controller.abort();
+  signal.addEventListener('abort', onAbort, { once: true });
+  const timer = setTimeout(() => controller.abort(), 3500);
+  const get = async (url: string) => {
+    const res = await fetch(url, { redirect: 'follow', signal: controller.signal, headers: { 'user-agent': config.userAgent } });
+    return res.ok ? (await res.text()).slice(0, 500_000) : '';
+  };
+  try {
+    const xml = await get(new URL('/sitemap.xml', siteUrl).toString());
+    const direct = findProductInSitemap(platform, xml);
+    if (direct) return direct;
+    // Sitemap index (Shopify, many others): follow the products sitemap.
+    const child = xml.match(/<loc>\s*([^<\s]*product[^<\s]*)\s*<\/loc>/i)?.[1];
+    return child ? findProductInSitemap(platform, await get(child)) : null;
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timer);
+    signal.removeEventListener('abort', onAbort);
+  }
 }
 
 async function fetchProductFromCollection(

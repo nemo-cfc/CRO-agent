@@ -20,7 +20,10 @@ const CREDIT: Record<Check['status'], number> = {
  * and a category where everything was skipped scores 100 rather than 0.
  */
 export function scoreChecks(checks: Check[]): Scorecard {
-  const categories: CategoryScore[] = CATEGORIES.map((category) => {
+  // A category that produced no checks at all (copy, or forms on a store,
+  // where they are not run) is left out of the scorecard instead of "n/a".
+  const present = CATEGORIES.filter((category) => checks.some((c) => c.category === category));
+  const categories: CategoryScore[] = present.map((category) => {
     const own = checks.filter((c) => c.category === category);
     const applicable = own.filter((c) => c.status !== 'na' && c.weight > 0);
 

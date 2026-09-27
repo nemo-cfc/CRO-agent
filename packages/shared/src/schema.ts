@@ -62,6 +62,8 @@ export const PlatformSchema = z.enum([
   'woocommerce',
   'magento',
   'bigcommerce',
+  /** Online store on a custom or unrecognised platform (detected from store signals). */
+  'store',
   'wordpress',
   'other',
 ]);
@@ -72,6 +74,7 @@ export const ECOMMERCE_PLATFORMS: Platform[] = [
   'woocommerce',
   'magento',
   'bigcommerce',
+  'store',
 ];
 
 export const PLATFORM_LABELS: Record<Platform, string> = {
@@ -79,6 +82,7 @@ export const PLATFORM_LABELS: Record<Platform, string> = {
   woocommerce: 'WooCommerce',
   magento: 'Magento',
   bigcommerce: 'BigCommerce',
+  store: 'custom storefront',
   wordpress: 'WordPress',
   other: 'Unknown platform',
 };
@@ -108,8 +112,25 @@ export const CheckSchema = z.object({
   scope: z.enum(['home', 'keypage', 'collection', 'product', 'site']).default('home'),
   /** Raw measured values, for the report and for the model's evidence packet. */
   evidence: z.record(z.union([z.string(), z.number(), z.boolean(), z.null()])).default({}),
+  /**
+   * Visual proof for the report UI. Never part of the model's packet.
+   * `element` carries its own highlighted crop; `page` points at the
+   * above-fold shot already streamed for that role and viewport.
+   */
+  shot: z
+    .object({
+      kind: z.enum(['element', 'page']),
+      role: z.enum(['home', 'keypage', 'collection', 'product']),
+      viewport: z.enum(['desktop', 'mobile']),
+      caption: z.string(),
+      dataUri: z.string().optional(),
+      /** False for plain views (e.g. the open bag) that carry no highlight box. */
+      highlighted: z.boolean().optional(),
+    })
+    .optional(),
 });
 export type Check = z.infer<typeof CheckSchema>;
+export type CheckShot = NonNullable<Check['shot']>;
 
 export const CategoryScoreSchema = z.object({
   category: CategorySchema,
@@ -231,6 +252,10 @@ export const FrictionEvidenceSchema = z.object({
   largestOverlayCoverage: z.number(),
   openDialogs: z.number().int(),
   cookieBanner: z.boolean(),
+  /** Share of the viewport covered by the consent banner itself (not the largest overlay). */
+  cookieCoverage: z.number().default(0),
+  /** Distinct pop-ups on arrival, backdrops merged into the pop-up they sit behind. */
+  overlays: z.array(z.object({ kind: z.string(), coverage: z.number(), text: z.string() })).default([]),
   chatWidget: z.boolean(),
   /** Chat widget or similar covering a CTA's bounding box. */
   widgetObscuresCta: z.boolean(),
@@ -279,6 +304,10 @@ export const EcommerceEvidenceSchema = z.object({
   priceText: z.string().nullable(),
   addToCartText: z.string().nullable(),
   addToCartAboveFold: z.boolean(),
+  /** A buy button in a sticky bar is on screen on arrival. */
+  stickyBuyBar: z.boolean().default(false),
+  /** Rating from the page's product structured data, e.g. "4.7 out of 5 from 303 reviews". */
+  structuredRating: z.string().nullable().default(null),
   addToCartWidth: z.number(),
   addToCartHeight: z.number(),
   variantGroups: z.number().int(),
@@ -287,6 +316,8 @@ export const EcommerceEvidenceSchema = z.object({
   reviewWidget: z.boolean(),
   ratingText: z.string().nullable(),
   shippingInfo: z.boolean(),
+  /** Shipping terms stated site-wide (announcement bar / header), not at the buy button. */
+  shippingBanner: z.boolean().optional(),
   returnsInfo: z.boolean(),
   paymentIcons: z.number().int(),
   /* collection-page signals */
@@ -310,6 +341,30 @@ export const VisualObservationSchema = z.object({
   contrast: z.number().optional(), contrastThreshold: z.number().optional(),
 });
 export type VisualObservation = z.infer<typeof VisualObservationSchema>;
+
+/**
+ * One add-to-bag interaction on the product page: which options were picked,
+ * whether a drawer or cart page appeared, and what it offered. `failed` means
+ * the interaction could not be completed automatically, not that the store is
+ * broken.
+ */
+export const CartProbeSchema = z.object({
+  status: z.enum(['opened', 'no-feedback', 'failed']),
+  reason: z.string().nullable(),
+  selections: z.array(z.string()),
+  buttonText: z.string().nullable(),
+  kind: z.enum(['drawer', 'page', 'toast', 'none']),
+  hasCheckout: z.boolean(),
+  checkoutText: z.string().nullable(),
+  hasContinueShopping: z.boolean(),
+  hasRecommendations: z.boolean(),
+  hasFreeShippingMessage: z.boolean(),
+  hasExpressPay: z.boolean(),
+  ms: z.number(),
+  /** Tracking/ad requests aborted during the tap, so no fake AddToCart reached the store. */
+  trackingBlocked: z.number().optional(),
+});
+export type CartProbe = z.infer<typeof CartProbeSchema>;
 
 export const PageEvidenceSchema = z.object({
   duplicateScripts: z.array(z.object({provider:z.enum(['Meta','Google Ads / Analytics','Google Tag Manager']),source:z.string(),count:z.number().int().min(2)})).optional(),
@@ -335,6 +390,10 @@ export const PageEvidenceSchema = z.object({
   copy: CopyEvidenceSchema,
   ecommerce: EcommerceEvidenceSchema,
   screenshot: z.string().nullable(),
+  /** Highlighted crops of the elements individual checks measured (report UI only). */
+  elementShots: z.array(z.object({ key: z.string(), dataUri: z.string() })).optional(),
+  /** Result of tapping the buy button once (product page, mobile only). */
+  cartProbe: CartProbeSchema.optional(),
 });
 export type PageEvidence = z.infer<typeof PageEvidenceSchema>;
 

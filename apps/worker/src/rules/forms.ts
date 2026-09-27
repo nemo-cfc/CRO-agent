@@ -1,9 +1,15 @@
 import type { Check } from '@cro/shared';
+import { isStore } from '@cro/shared';
 import { check, skipped, type RuleContext } from './util.js';
 
 const OUTCOME_SUBMIT = /\b(get|start|book|send|join|claim|download|request|subscribe|create|reserve|continue to)\b/i;
 
 export function formRules(ctx: RuleContext): Check[] {
+  // Lead-capture advice ("four fields or fewer"). On a store the only form on
+  // the audited pages is the footer newsletter signup, which is not where a
+  // store converts, so these checks are not run there at all.
+  if (isStore(ctx.evidence.platform)) return [];
+
   // Prefer whichever page actually has a form — often the key page, not home.
   const withForm =
     [ctx.keyDesktop, ctx.keyMobile, ctx.homeDesktop, ctx.homeMobile].find(

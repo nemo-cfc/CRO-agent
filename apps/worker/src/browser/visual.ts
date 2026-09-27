@@ -26,6 +26,7 @@ export function collectVisualObservations(): VisualObservation[] {
     if (rect.width <= 0 || rect.height <= 0 || rect.left < 0 || rect.top < 0 || rect.right > width || rect.bottom > height) continue;
     let safe = true;
     let background: number[] | null = null;
+    let backgroundOwner: Element | null = null;
     for (let node: Element | null = el; node; node = node.parentElement) {
       const style = getComputedStyle(node);
       if (style.display === 'none' || style.visibility !== 'visible' || Number(style.opacity) !== 1 || style.transform !== 'none' || style.filter !== 'none' || style.mixBlendMode !== 'normal' || style.clipPath !== 'none' || style.textShadow !== 'none' || node.getAnimations().some(a => a.playState === 'running')) { safe = false; break; }
@@ -39,7 +40,26 @@ export function collectVisualObservations(): VisualObservation[] {
       if (!background && bg) {
         const alpha = bg[3] ?? 1;
         if (alpha !== 0 && alpha !== 1) safe = false;
-        if (alpha === 1) background = bg;
+        if (alpha === 1) { background = bg; backgroundOwner = node; }
+      }
+    }
+    if (!safe) continue;
+    // The ancestor colour is only the real background if nothing is painted
+    // between it and the text. Hero text usually sits over a separate <img> or
+    // <video> element, which the ancestor walk cannot see; white text over a
+    // photo was being reported as 1.07:1 "on a solid background".
+    {
+      // Overlap test rather than hit-testing: hero images are usually
+      // pointer-events:none, which elementsFromPoint skips.
+      const root = backgroundOwner ?? document.body;
+      for (const layer of Array.from(root.querySelectorAll('img, video, picture, canvas, iframe, [style*="background"]')).slice(0, 400)) {
+        if (layer.contains(el) || el.contains(layer)) continue;
+        const q = layer.getBoundingClientRect();
+        if (q.width <= 0 || q.height <= 0 || q.left >= rect.right || q.right <= rect.left || q.top >= rect.bottom || q.bottom <= rect.top) continue;
+        if (/^(IMG|VIDEO|PICTURE|CANVAS|IFRAME)$/i.test(layer.tagName) || getComputedStyle(layer).backgroundImage !== 'none') {
+          safe = false;
+          break;
+        }
       }
     }
     if (!safe) continue;

@@ -1,6 +1,13 @@
 import type { Check } from '@cro/shared';
 import { check, skipped, type RuleContext } from './util.js';
 
+const KIND_LABEL: Record<string, string> = {
+  locale: 'country or region selector',
+  email: 'email sign-up / discount pop-up',
+  age: 'age confirmation',
+  other: 'pop-up',
+};
+
 export function frictionRules(ctx: RuleContext): Check[] {
   const page = ctx.homeMobile ?? ctx.homeDesktop;
   if (!page) {
@@ -8,51 +15,47 @@ export function frictionRules(ctx: RuleContext): Check[] {
   }
 
   const f = page.friction;
+  const viewport = page.viewport === 'mobile' ? 'on mobile' : 'on desktop';
   const out: Check[] = [];
 
+  // Cookie banners are judged on their own below; everything else that
+  // covers a meaningful share of the screen on arrival is an interruption.
+  const popups = (f.overlays ?? []).filter((o) => o.kind !== 'cookie' && o.coverage > 0.2);
+  const worst = Math.max(0, ...popups.map((o) => o.coverage));
+  const described = popups
+    .map((o) => `a ${KIND_LABEL[o.kind] ?? 'pop-up'} (${o.text ? `"${o.text.slice(0, 60)}${o.text.length > 60 ? '…' : ''}"` : 'no text'})`)
+    .join(' and ');
   out.push(
     check({
       id: 'friction.blockingOverlay',
       category: 'friction',
       title: 'Nothing blocks the page on arrival',
-      status: f.blockingOverlays === 0 ? 'pass' : f.largestOverlayCoverage < 0.5 ? 'warn' : 'fail',
+      status: popups.length === 0 ? 'pass' : worst < 0.5 ? 'warn' : 'fail',
       weight: 1.5,
       detail:
-        f.blockingOverlays === 0
-          ? 'No large overlay covers the page on load.'
-          : `${f.blockingOverlays} overlay covers up to ${Math.round(f.largestOverlayCoverage * 100)}% of the screen the moment a visitor arrives. An interruption before any value has been delivered is the highest-bounce pattern on the web.`,
+        popups.length === 0
+          ? `No pop-up covers the page on arrival ${viewport}.`
+          : `On arrival ${viewport}, ${described} ${popups.length === 1 ? 'covers' : 'cover'} ${Math.round(worst * 100)}% of the screen${worst >= 0.99 ? ' (including the dimmed backdrop)' : ''} before the visitor has done anything.`,
       evidence: {
-        overlays: f.blockingOverlays,
-        coverage: f.largestOverlayCoverage,
+        popups: popups.length,
+        coverage: worst,
+        kinds: popups.map((o) => o.kind).join(', '),
       },
     }),
   );
 
-  out.push(
-    check({
-      id: 'friction.dialogs',
-      category: 'friction',
-      title: 'No modal opens unprompted',
-      status: f.openDialogs === 0 ? 'pass' : 'fail',
-      detail:
-        f.openDialogs === 0
-          ? 'No modal dialog is open at load.'
-          : `${f.openDialogs} modal dialog${f.openDialogs === 1 ? ' is' : 's are'} already open when the page loads, before the visitor has done anything.`,
-      evidence: { openDialogs: f.openDialogs },
-    }),
-  );
-
+  const cookie = f.cookieBanner ? (f.cookieCoverage ?? 0) : 0;
   out.push(
     check({
       id: 'friction.cookieBanner',
       category: 'friction',
       title: 'Consent notice stays out of the way',
-      status: !f.cookieBanner ? 'pass' : f.largestOverlayCoverage < 0.25 ? 'warn' : 'fail',
+      status: !f.cookieBanner || cookie <= 0.2 ? 'pass' : cookie <= 0.35 ? 'warn' : 'fail',
       weight: 0.75,
       detail: !f.cookieBanner
-        ? 'No cookie or consent banner blocking the view.'
-        : `A consent banner is present and the largest overlay covers ${Math.round(f.largestOverlayCoverage * 100)}% of the viewport. Consent is often legally necessary; taking half the screen on a phone is not.`,
-      evidence: { cookieBanner: f.cookieBanner, coverage: f.largestOverlayCoverage },
+        ? `No cookie or consent banner was showing on arrival ${viewport}.`
+        : `The consent banner covers ${Math.round(cookie * 100)}% of the screen ${viewport}.${cookie > 0.2 ? ' Consent is often legally required, but a compact bar leaves the page usable while the visitor decides.' : ''}`,
+      evidence: { cookieBanner: f.cookieBanner, coverage: cookie },
     }),
   );
 

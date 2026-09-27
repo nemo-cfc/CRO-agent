@@ -1,4 +1,5 @@
 import type { Check } from '@cro/shared';
+import { isStore } from '@cro/shared';
 import { check, skipped, type RuleContext } from './util.js';
 
 export function trustRules(ctx: RuleContext): Check[] {
@@ -8,11 +9,11 @@ export function trustRules(ctx: RuleContext): Check[] {
   }
 
   const t = home.trust;
-  const schemaTypes = ctx.evidence.static?.schemaTypes ?? [];
-
   const out: Check[] = [];
 
-  out.push(
+  // Stores carry customer reviews on product pages, not the homepage;
+  // ecommerce.socialProof checks them where they belong.
+  if (!isStore(ctx.evidence.platform)) out.push(
     check({
       id: 'trust.testimonials',
       category: 'trust',
@@ -27,22 +28,9 @@ export function trustRules(ctx: RuleContext): Check[] {
     }),
   );
 
-  out.push(
-    check({
-      id: 'trust.reviewSchema',
-      category: 'trust',
-      title: 'Reviews marked up for search results',
-      status: t.reviewSchema || schemaTypes.some((s) => /Review|AggregateRating/.test(s)) ? 'pass' : 'warn',
-      weight: 0.75,
-      detail:
-        t.reviewSchema
-          ? 'Review or rating structured data is present, so stars can appear in search results.'
-          : 'No review structured data. Ratings will not show as stars in Google results, which costs click-through before anyone reaches the page.',
-      evidence: { schemaTypes: schemaTypes.join(', ') },
-    }),
-  );
-
-  out.push(
+  // "Client logos and certifications" is B2B/service-site advice; a store's
+  // trust comes from reviews, delivery and returns, checked on the product page.
+  if (!isStore(ctx.evidence.platform)) out.push(
     check({
       id: 'trust.logos',
       category: 'trust',

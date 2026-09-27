@@ -8,7 +8,6 @@ import { trustRules } from './trust.js';
 import { formRules } from './forms.js';
 import { speedRules } from './speed.js';
 import { mobileRules } from './mobile.js';
-import { copyRules } from './copy.js';
 import { technicalRules } from './technical.js';
 import { trackingRules } from './tracking.js';
 import { frictionRules } from './friction.js';
@@ -22,7 +21,6 @@ const RULES = [
   formRules,
   speedRules,
   mobileRules,
-  copyRules,
   technicalRules,
   trackingRules,
   frictionRules,

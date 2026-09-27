@@ -75,6 +75,17 @@ export function detectPlatform(html: string, headers?: Headers): Platform {
     const hits = fp.markers.filter((m) => m.test(sample)).length;
     if (hits > 0) return fp.platform;
   }
+  // No known platform, but it may still be a store. Two independent signals
+  // are required so a blog linking to a shop is not mistaken for one.
+  const signals = [
+    /href="[^"]*\/(cart|bag|basket)\/?["?#]/i,
+    /add to (cart|bag|basket)/i,
+    /"@type"\s*:\s*"(Product|Offer|AggregateOffer)"/i,
+    /href="[^"]*\/(products?|collections?)\/[^"]+"/i,
+    // Built-in mini-cart markup (Bellroy ships "MiniCart_Cart_SubTotal").
+    /class="[^"]*(mini-?cart|cart-?drawer|cart_subtotal|cart__subtotal|MiniCart)/i,
+  ].filter((re) => re.test(sample)).length;
+  if (signals >= 2) return 'store';
   return 'other';
 }
 
@@ -106,6 +117,12 @@ const PATTERNS: Record<Platform, UrlPatterns> = {
   bigcommerce: {
     collection: [/\/categories\//i],
     product: [/\/products\//i],
+  },
+  // Custom storefronts: common path shapes. /products/category/x is a
+  // category, not a product, so product paths must be a single segment.
+  store: {
+    collection: [/\/(collections?|categor(y|ies)|shop|c)\/[^?#]+/i],
+    product: [/\/(products?|p|item|items)\/[^/?#]+\/?$/i, /\/[^/]+\.html$/i],
   },
   wordpress: { collection: [], product: [] },
   other: { collection: [], product: [] },
@@ -173,6 +190,23 @@ export function findStorePages(
  * collection page's markup, preferring anything the page itself marks up as a
  * Product via schema.org.
  */
+/**
+ * First product URL listed in a sitemap. Used when a store renders its
+ * collection grid client-side, so neither the homepage nor the collection
+ * HTML links a product (Bellroy).
+ */
+export function findProductInSitemap(platform: Platform, xml: string): string | null {
+  const patterns = PATTERNS[platform].product;
+  if (patterns.length === 0) return null;
+  for (const m of xml.slice(0, 500_000).matchAll(/<loc>\s*([^<\s]+)\s*<\/loc>/gi)) {
+    try {
+      const u = new URL(m[1]!);
+      if (!NOT_A_PRODUCT.test(u.pathname) && patterns.some((p) => p.test(u.pathname))) return u.toString();
+    } catch { /* not a URL */ }
+  }
+  return null;
+}
+
 export function findProductInHtml(
   platform: Platform,
   html: string,

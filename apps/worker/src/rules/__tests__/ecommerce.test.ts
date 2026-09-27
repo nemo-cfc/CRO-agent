@@ -153,6 +153,16 @@ describe('store checks', () => {
     expect(byId(runRules(ev).checks, 'ecommerce.deliveryTerms').status).toBe('fail');
   });
 
+  it('does not call shipping missing when a site-wide banner states it', () => {
+    const ev = withRole('product', {
+      ecommerce: { ...page().ecommerce, shippingInfo: false, shippingBanner: true, returnsInfo: false },
+    });
+    const c = byId(runRules(ev).checks, 'ecommerce.deliveryTerms');
+    expect(c.status).toBe('warn');
+    expect(c.detail).toMatch(/only in the site-wide banner/);
+    expect(c.detail).not.toMatch(/No shipping/);
+  });
+
   it('fails a collection grid with no prices', () => {
     const ev = withRole('collection', {
       ecommerce: { ...page().ecommerce, productTiles: 24, tilesWithPrice: 0 },

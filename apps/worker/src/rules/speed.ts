@@ -117,8 +117,8 @@ export function speedRules(ctx: RuleContext): Check[] {
           status: gradeBelow(p.totalBytes, 2_000_000, 5_000_000),
           weight: 1.25,
           detail: dominatedByImages
-            ? `At least ${kb(p.totalBytes)} transferred across ${p.resourceCount} requests, and ${kb(p.imageBytes)} of that is images — ${Math.round(imageShare * 100)}% of the page. Converting them to WebP at display size typically cuts this by 80-90% with no visible quality loss, and it is the single largest speed lever available here.`
-            : `At least ${kb(p.totalBytes)} transferred across ${p.resourceCount} requests (${kb(p.imageBytes)} images, ${kb(p.scriptBytes)} JavaScript). Cross-origin files that do not report their size are excluded, so the real figure is higher.`,
+            ? `At least ${kb(p.totalBytes)} transferred across ${p.resourceCount} requests on the mobile homepage, and ${kb(p.imageBytes)} of that is images (${Math.round(imageShare * 100)}% of the page). Serving each image no larger than it is displayed, in a modern format where it is not already, is usually the biggest saving available.`
+            : `At least ${kb(p.totalBytes)} transferred across ${p.resourceCount} requests on the mobile homepage${p.imageBytes > 0 ? ` (${kb(p.imageBytes)} images, ${kb(p.scriptBytes)} JavaScript)` : ` (${kb(p.scriptBytes)} JavaScript; image sizes were not reported by the image server)`}. Files from other domains that do not report their size are excluded, so the real figure is higher.`,
           evidence: {
             totalBytes: p.totalBytes,
             imageBytes: p.imageBytes,

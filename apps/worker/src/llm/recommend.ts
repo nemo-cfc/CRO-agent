@@ -1,4 +1,4 @@
-import { isPublishableFinding, visibleSummary } from '@cro/shared';
+import { isRecommendable, visibleSummary } from '@cro/shared';
 import { groundedRecommendation } from './publication.js';
 import Groq from 'groq-sdk';
 import {
@@ -48,7 +48,7 @@ export async function writeRecommendations(
   cb: RecommendCallbacks,
 ): Promise<RecommendResult> {
   cb.onSummary(visibleSummary(checks));
-  if (!checks.some(isPublishableFinding)) return { ok: true, count: 0, note: null, usage: null };
+  if (!checks.some(isRecommendable)) return { ok: true, count: 0, note: null, usage: null };
   if (!config.groqApiKey) {
     return {
       ok: false,
@@ -72,7 +72,8 @@ export async function writeRecommendations(
   try {
     const stream = await getClient().chat.completions.create({
       model: config.model,
-      max_completion_tokens: 8000,
+      // Reserved answer length counts against the per-minute token limit.
+      max_completion_tokens: 3000,
       reasoning_effort: config.effort,
       stream: true,
       response_format: { type: 'json_object' },
@@ -138,10 +139,17 @@ export async function writeRecommendations(
         usage: null,
       };
     }
+    // The raw provider error can include account details; it goes to the
+    // worker log only, and the report gets a plain explanation.
+    const message = err instanceof Error ? err.message : String(err);
+    console.error('[recommend] model call failed:', message);
+    const limited = /\b(413|429)\b|rate.?limit|tokens per minute/i.test(message);
     return {
       ok: false,
       count: index,
-      note: `Could not generate recommendations: ${err instanceof Error ? err.message : String(err)}`,
+      note: limited
+        ? 'Written recommendations are temporarily unavailable (the AI usage limit was reached). The checks above are complete.'
+        : 'Written recommendations could not be generated this time. The checks above are complete.',
       usage: null,
     };
   }

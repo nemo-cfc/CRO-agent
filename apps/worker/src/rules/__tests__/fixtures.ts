@@ -41,7 +41,7 @@ export function page(overrides: Partial<PageEvidence> = {}): PageEvidence {
     },
     friction: {
       blockingOverlays: 0, largestOverlayCoverage: 0, openDialogs: 0,
-      cookieBanner: false, chatWidget: false, widgetObscuresCta: false,
+      cookieBanner: false, cookieCoverage: 0, overlays: [], chatWidget: false, widgetObscuresCta: false,
     },
     tracking: {
       ga4: true, gtm: true, metaPixel: true, clarity: true, hotjar: false,
@@ -60,6 +60,8 @@ export function page(overrides: Partial<PageEvidence> = {}): PageEvidence {
       priceText: '£49.00',
       addToCartText: 'Add to cart',
       addToCartAboveFold: true,
+      stickyBuyBar: false,
+      structuredRating: null,
       addToCartWidth: 320,
       addToCartHeight: 52,
       variantGroups: 2,

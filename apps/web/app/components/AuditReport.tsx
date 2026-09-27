@@ -44,6 +44,17 @@ function ScoreBadge({ score, highlight }: { score: number; highlight?: boolean }
   );
 }
 
+function GainBlock({ gain }: { gain: string }) {
+  const [outcome, metric] = gain.split(/\s*Watch:\s*/);
+  return (
+    <div className="rp-op-gain">
+      <strong>What you gain by fixing it</strong>
+      <p>{outcome}</p>
+      {metric && <p className="rp-op-metric"><span>Number to watch</span>{metric.charAt(0).toUpperCase() + metric.slice(1).replace(/\.$/, '')}</p>}
+    </div>
+  );
+}
+
 function OpportunityCard({ item, shots, repeatShot }: { item: Item; shots: ReportState['shots']; repeatShot: boolean }) {
   const { check, score, locked } = item;
   const text = plainLanguage(check);
@@ -55,6 +66,7 @@ function OpportunityCard({ item, shots, repeatShot }: { item: Item; shots: Repor
       </div>
       <p className="rp-op-found">{text.found}</p>
       {text.why && <p className="rp-op-why"><strong>Why it matters</strong>{text.why}</p>}
+      {text.gain && <GainBlock gain={text.gain} />}
       {text.fix && (
         locked ? (
           <div className="rp-op-fix rp-fix-locked">

@@ -38,6 +38,8 @@ describe('opportunity scoring', () => {
       const p = plainLanguage(c);
       expect(p.found.length, c.id).toBeGreaterThan(0);
       expect(p.fix.length, c.id).toBeGreaterThan(0);
+      expect(p.gain.length, `${c.id} needs a business-impact statement`).toBeGreaterThan(0);
+      expect(p.gain, c.id).not.toMatch(/\d+\s*%/);
     }
   });
 });

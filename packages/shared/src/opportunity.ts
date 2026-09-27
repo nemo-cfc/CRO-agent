@@ -259,6 +259,98 @@ const META: Record<string, Meta> = {
   'tracking.behaviour': { cohort: 'measurement', impact: 1, plain: { why: 'Session recordings show where visitors get stuck.', fix: 'Consider a free tool such as Microsoft Clarity.' } },
 };
 
+/**
+ * The business result of fixing each item, and the number that should move.
+ * Deliberately without percentages: the instant audit has no store data to
+ * back a figure, so it names the outcome and the metric to watch instead.
+ */
+const GAINS: Record<string, string> = {
+  'friction.blockingOverlay': 'More of the visitors you paid to attract stay long enough to see your products, so fewer leave in the first seconds and more go on to view a product. Watch: mobile bounce rate and homepage-to-product-view rate.',
+  'friction.cookieBanner': 'Your offer and products are visible from the first second instead of hidden behind a notice, so more visitors start browsing. Watch: mobile bounce rate.',
+  'friction.chatWidget': 'Every tap on the button reaches the button, so no shopper is lost to an accidental chat window. Watch: clicks on the covered button.',
+
+  'aboveFold.h1Present': 'First-time visitors understand what you sell at a glance, so fewer leave confused and more click through to shop. Watch: homepage bounce rate.',
+  'aboveFold.h1Length': 'Your main message is read instead of skimmed, so more visitors grasp your offer before scrolling. Watch: homepage bounce rate.',
+  'aboveFold.heroCopy': 'Visitors get a reason to care before they scroll away, lifting how many go on to explore your products. Watch: homepage-to-collection clicks.',
+  'aboveFold.ctaDesktop': 'Ready-to-buy desktop visitors get an obvious first step, so more of them start shopping instead of drifting. Watch: homepage click-through rate on desktop.',
+  'aboveFold.ctaMobile': 'Phone visitors, usually most of your traffic, get an obvious first step, so more of them start shopping. Watch: homepage click-through rate on mobile.',
+  'cta.competing': 'A single clear next step removes hesitation, so more visitors take the path that leads to a sale. Watch: clicks on your main button.',
+  'cta.keyPage': 'Visitors who reach this page ready to act can act right away, turning more of that intent into sales. Watch: this page’s click-through rate.',
+
+  'cta.contrast': 'Your main button gets noticed, so more visitors click it and move towards a purchase. Watch: clicks on the main button.',
+  'cta.tapTarget': 'The button is easy to hit on a phone, so fewer shoppers give up after a missed tap. Watch: mobile clicks on the main button.',
+  'cta.copy': 'Visitors know exactly what they get by tapping, so more of them tap. Watch: clicks on the main button.',
+  'mobile.tapTargets': 'Fewer mis-taps and less frustration on phones, so more mobile visitors reach the products they meant to open. Watch: mobile pages per visit.',
+  'mobile.stickyCta': 'The main action stays within reach while shoppers scroll, capturing buyers the moment they decide. Watch: mobile clicks on the main button.',
+  'ecommerce.addToCartSize': 'Your most valuable tap becomes effortless, so fewer ready buyers miss it. Watch: mobile add-to-cart rate.',
+
+  'mobile.textSize': 'Product details and offers actually get read on phones, so fewer questions stand between a shopper and the buy button. Watch: mobile time on page.',
+  'mobile.overflow': 'The site feels solid and trustworthy on phones, so fewer mobile visitors leave thinking it is broken. Watch: mobile bounce rate.',
+  'mobile.viewportMeta': 'The site becomes usable on phones at all, recovering mobile shoppers who currently struggle to read or tap anything. Watch: mobile conversion rate.',
+
+  'speed.lcp': 'Shoppers see your page sooner, so fewer give up while waiting, and every visitor from ads, email or social is worth more. Watch: mobile bounce rate and conversion rate.',
+  'speed.fcp': 'Visitors see something straight away instead of a blank screen, so fewer leave before the page appears. Watch: mobile bounce rate.',
+  'speed.cls': 'Shoppers stop tapping the wrong thing as the page shifts, so browsing feels smooth and fewer abandon in frustration. Watch: mobile pages per visit.',
+  'speed.ttfb': 'Every page on the site starts loading sooner, which speeds up the whole shopping journey. Watch: page load time and bounce rate.',
+  'speed.blocking': 'Taps and scrolls respond instantly, so the store feels quick and shoppers keep going. Watch: mobile pages per visit.',
+  'speed.inp': 'The store reacts the moment people tap, so buying feels effortless. Watch: add-to-cart rate.',
+  'speed.imageDimensions': 'A steady page means fewer mis-taps and a more polished feel, which supports trust. Watch: mobile pages per visit.',
+  'speed.weight': 'Lighter pages load faster on mobile data, keeping more shoppers on the site. Watch: mobile bounce rate.',
+
+  'ecommerce.price': 'Shoppers get their first answer instantly, so fewer leave the product page to look elsewhere. Watch: product-view-to-add-to-cart rate.',
+  'ecommerce.addToCart': 'Ready buyers can act the moment they decide, turning more product views into purchases. Watch: mobile product-view-to-add-to-cart rate.',
+  'ecommerce.socialProof': 'First-time shoppers gain the confidence to buy from a brand they do not know yet, one of the biggest levers on product-page sales. Watch: product-view-to-add-to-cart rate.',
+  'ecommerce.gallery': 'Photos answer questions a shopper cannot ask in person, so more buy with confidence and fewer return. Watch: add-to-cart rate and return rate.',
+  'ecommerce.stock': 'Removes a small doubt at no cost, so hesitant shoppers commit sooner. Watch: add-to-cart rate.',
+  'ecommerce.deliveryTerms': 'Shoppers know the cost, timing and return terms before checkout, so fewer abandon the cart over surprises. Watch: add-to-cart-to-checkout rate.',
+  'ecommerce.paymentTrust': 'Familiar payment options reassure new customers and make larger orders easier to say yes to. Watch: checkout completion rate.',
+  'ecommerce.variantLoad': 'Fewer decisions before the buy button means fewer chances to hesitate. Watch: add-to-cart rate.',
+
+  'ecommerce.tilePrices': 'Shoppers can compare at a glance and open only products they can afford, so more views turn into purchases. Watch: collection-to-product-view rate.',
+  'ecommerce.browseTools': 'Shoppers find the right product in a few taps instead of scrolling through everything, so more of them reach a product they want. Watch: collection-to-product-view rate.',
+  'ecommerce.search': 'Shoppers who already know what they want go straight to it; they are typically your most ready-to-buy visitors. Watch: search usage and its conversion rate.',
+  'ecommerce.cartAccess': 'Shoppers can get back to their bag from anywhere, so fewer carts are forgotten. Watch: cart-to-checkout rate.',
+
+  'ecommerce.cartFeedback': 'Shoppers know instantly that it worked and see the way to checkout, so fewer stall after adding an item. Watch: add-to-cart-to-checkout rate.',
+  'ecommerce.cartContinue': 'Shoppers who want a second item can go back without losing their bag, which raises items per order. Watch: average order value.',
+  'ecommerce.cartCrossSell': 'Matching items shown at the moment of highest intent add to more orders. Watch: average order value.',
+
+  'trust.testimonials': 'New visitors see real customers vouching for you before they reach a product, so more of them trust you enough to buy. Watch: first-time visitor conversion rate.',
+  'trust.logos': 'Recognisable names borrow credibility for your brand, so sceptical first-time visitors are more likely to buy. Watch: first-time visitor conversion rate.',
+  'trust.legal': 'Removes a red flag that makes careful shoppers hesitate at checkout. Watch: checkout completion rate.',
+  'trust.contact': 'Shoppers with a last question can get an answer instead of leaving, and knowing they can reach you builds trust. Watch: conversion rate for first-time visitors.',
+  'trust.presence': 'Shows there is a real business behind the store, which reassures first-time buyers. Watch: first-time visitor conversion rate.',
+
+  'forms.fieldCount': 'A shorter form means more people finish it, so you capture more leads and sign-ups. Watch: form completion rate.',
+  'forms.labels': 'Fewer mistakes and less confusion, so more people complete the form. Watch: form completion rate.',
+  'forms.autocomplete': 'Phone users fill the form in seconds, so more of them finish it. Watch: mobile form completion rate.',
+  'forms.submitCopy': 'People know what they will get, so more of them press the button. Watch: form submissions.',
+  'forms.captcha': 'Real customers stop being turned away by puzzles, so more submissions get through. Watch: form completion rate.',
+
+  'technical.title': 'A clear title in Google results earns more clicks from people already searching for what you sell. Watch: search click-through rate.',
+  'technical.metaDescription': 'A complete, persuasive snippet in Google earns more clicks from searchers. Watch: search click-through rate.',
+  'technical.canonical': 'Google ranks the right page instead of splitting its attention across duplicates. Watch: organic search traffic.',
+  'technical.socialPreview': 'Links shared by customers and on social media stand out with an image, bringing in more free visits. Watch: social referral traffic.',
+  'technical.schema': 'Richer Google results (such as ratings and prices) stand out and earn more clicks. Watch: search click-through rate.',
+  'technical.lang': 'Search engines and browsers handle your pages correctly for your audience. Watch: organic search traffic.',
+
+  'tracking.analytics': 'You can see which pages and channels bring sales, so you spend on what works. Watch: whether each change moves conversion rate.',
+  'tracking.tagManager': 'Your team can add and fix tracking without waiting for a developer, so testing moves faster.',
+  'tracking.adPixel': 'Ad platforms learn who actually buys, so the same ad budget brings in more customers. Watch: return on ad spend.',
+  'tracking.behaviour': 'You see exactly where real shoppers get stuck, so you fix the issues that cost the most sales first.',
+};
+
+function gainFor(check: Check): string {
+  const exact = GAINS[check.id];
+  if (exact) return exact;
+  if (check.id.startsWith('visual.first-view-overlay')) return GAINS['friction.blockingOverlay']!;
+  if (check.id.startsWith('visual.low-contrast')) return 'Your message and offers are actually read, so fewer shoppers miss the details that persuade them to buy. Watch: clicks on the affected section.';
+  if (check.id.startsWith('visual.small-text')) return 'Details shoppers need get read on phones, so fewer questions stand between them and the buy button. Watch: mobile add-to-cart rate.';
+  if (check.id.startsWith('visual.generic-action')) return 'Visitors know what they get by tapping, so more of them tap. Watch: clicks on that button.';
+  if (check.id.startsWith('observed.')) return 'Your numbers become trustworthy again, so decisions about ads and changes are based on real results.';
+  return '';
+}
+
 function metaFor(check: Check): Meta {
   const exact = META[check.id];
   if (exact) return exact;
@@ -323,11 +415,12 @@ export function opportunityLevel(score: number): 'High' | 'Moderate' | 'Low' {
 }
 
 /** Plain-language wording for a flagged check. */
-export function plainLanguage(check: Check): { found: string; why: string; fix: string } {
+export function plainLanguage(check: Check): { found: string; why: string; gain: string; fix: string } {
   const { plain } = metaFor(check);
   return {
     found: plain.found ? plain.found(check) : check.detail,
     why: plain.why,
+    gain: gainFor(check),
     fix: plain.fix,
   };
 }

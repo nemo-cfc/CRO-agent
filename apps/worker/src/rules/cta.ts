@@ -1,5 +1,6 @@
 import type { Check } from '@cro/shared';
 import { check, skipped, type RuleContext } from './util.js';
+import { isStore } from '@cro/shared';
 
 const GENERIC = /^(submit|click here|read more|learn more|continue|next|go|here|more|ok|send|enter)$/i;
 
@@ -27,7 +28,9 @@ export function ctaRules(ctx: RuleContext): Check[] {
           detail: `"${primary.text}" has a contrast ratio of ${primary.contrast}:1 against its background. WCAG AA asks for 4.5:1.`,
           evidence: { text: primary.text, contrast: primary.contrast },
         })
-      : skipped('cta.contrast', 'cta', 'Primary button meets contrast minimums', 'No primary call to action was identified.'),
+      : skipped('cta.contrast', 'cta', 'Primary button meets contrast minimums', primary
+          ? `The contrast of "${primary.text}" could not be measured reliably: it sits over an image or a semi-transparent background, so it is not scored.`
+          : 'No primary call to action was identified.'),
   );
 
   /* Tap target ----------------------------------------------------- */
@@ -46,7 +49,7 @@ export function ctaRules(ctx: RuleContext): Check[] {
                 : 'fail',
           weight: 1.25,
           detail: `"${mobilePrimary.text}" measures ${mobilePrimary.width}×${mobilePrimary.height}px on mobile. 44×44px is the accepted minimum for a comfortable tap.`,
-          evidence: { width: mobilePrimary.width, height: mobilePrimary.height },
+          evidence: { text: mobilePrimary.text, width: mobilePrimary.width, height: mobilePrimary.height },
         })
       : skipped('cta.tapTarget', 'cta', 'Primary button is thumb-sized on mobile', 'Mobile view did not load.'),
   );
@@ -69,9 +72,13 @@ export function ctaRules(ctx: RuleContext): Check[] {
   );
 
   /* Competing primary actions -------------------------------------- */
+  // Landing-page advice: one page, one goal. A store homepage offering
+  // parallel entry points ("Shop Men" / "Shop Women") is doing its job,
+  // so this is only judged on non-store sites.
+  const store = isStore(ctx.evidence.platform);
   const strong = home.ctas.filter((c) => c.prominence >= 6 && c.aboveFold);
   const distinctStrong = new Set(strong.map((c) => c.text.toLowerCase().trim())).size;
-  out.push(
+  if (!store) out.push(
     check({
       id: 'cta.competing',
       category: 'cta',

@@ -1,4 +1,5 @@
 import type { Check } from '@cro/shared';
+import { isStore } from '@cro/shared';
 import { check, skipped, type RuleContext } from './util.js';
 
 export function mobileRules(ctx: RuleContext): Check[] {
@@ -73,7 +74,7 @@ export function mobileRules(ctx: RuleContext): Check[] {
       detail:
         m.mobile.tinyTapTargets === 0 && m.mobile.crowdedTapTargets === 0
           ? 'All button-style targets clear 44×44px with adequate spacing.'
-          : `${m.mobile.tinyTapTargets} target${m.mobile.tinyTapTargets === 1 ? '' : 's'} below 44×44px and ${m.mobile.crowdedTapTargets} pair${m.mobile.crowdedTapTargets === 1 ? '' : 's'} sitting within 8px of each other. Both produce mis-taps, and a mis-tap on a checkout page is a lost sale.`,
+          : `On the homepage at 390px, ${m.mobile.tinyTapTargets} button-style target${m.mobile.tinyTapTargets === 1 ? " is" : "s are"} smaller than 44×44px (the common touch-target guideline) and ${m.mobile.crowdedTapTargets} sit within 8px of a different target. Small or tightly packed targets make mis-taps more likely.`,
       evidence: {
         tiny: m.mobile.tinyTapTargets,
         crowded: m.mobile.crowdedTapTargets,
@@ -81,7 +82,10 @@ export function mobileRules(ctx: RuleContext): Check[] {
     }),
   );
 
-  out.push(
+  // A sticky action bar is landing-page advice. A store homepage is a set of
+  // entry points, not one conversion; the product page is where a sticky buy
+  // bar belongs.
+  if (!isStore(ctx.evidence.platform)) out.push(
     check({
       id: 'mobile.stickyCta',
       category: 'mobile',

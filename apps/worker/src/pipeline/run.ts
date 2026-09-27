@@ -8,6 +8,7 @@ import { writeRecommendations } from '../llm/recommend.js';
 import { fetchStatic } from './static.js';
 import { fetchCrux } from './crux.js';
 import { pickTargets } from './targets.js';
+import { attachShots } from './attach-shots.js';
 
 export type Emit = (event: AuditEvent) => void;
 
@@ -95,17 +96,22 @@ export async function runAudit(url: string, emit: Emit): Promise<void> {
       product: ['mobile'],
     };
 
-    const loads = targets.flatMap((t) =>
-      VIEWPORTS[t.role].map((viewport) => ({
-        url: t.url,
-        role: t.role,
-        viewport,
-        // One screenshot per page: mobile everywhere, plus desktop home.
-        screenshot: viewport === 'mobile' || t.role === 'home',
-      })),
-    );
+    const loads: { url: string; role: typeof targets[number]['role']; viewport: 'desktop' | 'mobile'; screenshot: boolean; probeOnly?: boolean }[] =
+      targets.flatMap((t) =>
+        VIEWPORTS[t.role].map((viewport) => ({
+          url: t.url,
+          role: t.role,
+          viewport,
+          // One screenshot per page: mobile everywhere, plus desktop home.
+          screenshot: viewport === 'mobile' || t.role === 'home',
+        })),
+      );
+    // The add-to-bag test gets its own mobile session on the product page,
+    // in parallel with the measured load rather than after it.
+    const product = targets.find((t) => t.role === 'product');
+    if (product) loads.push({ url: product.url, role: 'product', viewport: 'mobile', screenshot: false, probeOnly: true });
 
-    const pages: PageEvidence[] = await Promise.all(
+    const allLoads: PageEvidence[] = await Promise.all(
       loads.map((t) =>
         collectPage({ ...t, signal }).then((page) => {
           // Push each screenshot the moment its page finishes rather than
@@ -124,6 +130,22 @@ export async function runAudit(url: string, emit: Emit): Promise<void> {
         }),
       ),
     );
+
+    // Fold the probe's result into the measured product page; the probe load
+    // itself is not a page the rules should score.
+    const probeLoad = allLoads[loads.findIndex((l) => l.probeOnly)] ?? null;
+    const pages = allLoads.filter((_, i) => !loads[i]!.probeOnly);
+    if (probeLoad) {
+      const target = pages.find((p) => p.role === 'product' && p.viewport === 'mobile');
+      if (target) {
+        target.cartProbe = probeLoad.cartProbe ?? {
+          status: 'failed', reason: probeLoad.error ?? 'The test page did not load in time.', selections: [], buttonText: null, kind: 'none',
+          hasCheckout: false, checkoutText: null, hasContinueShopping: false, hasRecommendations: false,
+          hasFreeShippingMessage: false, hasExpressPay: false, ms: 0,
+        };
+        target.elementShots = [...(target.elementShots ?? []), ...(probeLoad.elementShots ?? [])];
+      }
+    }
 
     const loaded = pages.filter((p) => p.ok);
 
@@ -173,7 +195,7 @@ export async function runAudit(url: string, emit: Emit): Promise<void> {
       crux,
       // Screenshots already went out over the wire; drop them from the
       // evidence object so the packet handed around stays small.
-      pages: pages.map((p) => ({ ...p, screenshot: null })),
+      pages: pages.map((p) => ({ ...p, screenshot: null, elementShots: undefined })),
     };
 
     emit({
@@ -194,24 +216,26 @@ export async function runAudit(url: string, emit: Emit): Promise<void> {
      * -------------------------------------------------------------- */
     phase('scoring', 'Running the checks');
     const { checks, scorecard } = runRules(evidence);
-    emit({ type: 'checks', checks, scorecard, at: at() });
+    // Pictures ride along for the report only; the model call below still
+    // receives the plain checks.
+    emit({ type: 'checks', checks: attachShots(checks, pages), scorecard, at: at() });
 
     /* -------------------------------------------------------------- *
      * Write. The single model call.
      * -------------------------------------------------------------- */
-    if (signal.aborted) {
-      notes.push('Ran out of time before writing recommendations. The checks above are complete.');
-      emit({ type: 'done', durationMs: at(), partial: true, notes, at: at() });
-      return;
-    }
-
+    // The model gets its own window. Measurement stops at the deadline with
+    // whatever it has; the write-up may then run until WRITE_DEADLINE_MS, so a
+    // slow site no longer leaves no time at all for recommendations.
+    const writer = new AbortController();
+    const writeTimer = setTimeout(() => writer.abort(), Math.max(3000, config.writeDeadlineMs - at()));
     phase('writing', 'Writing recommendations');
-    const result = await writeRecommendations(evidence, checks, scorecard, signal, {
+    const result = await writeRecommendations(evidence, checks, scorecard, writer.signal, {
       onSummary: (text) => emit({ type: 'summary', text, at: at() }),
       onRecommendation: (recommendation, index) =>
         emit({ type: 'rec', index, recommendation, at: at() }),
     });
 
+    clearTimeout(writeTimer);
     if (result.note) notes.push(result.note);
 
     phase('done', 'Report complete');

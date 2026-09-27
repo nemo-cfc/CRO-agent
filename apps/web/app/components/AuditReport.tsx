@@ -1,30 +1,196 @@
 'use client';
+import type { Check } from '@cro/shared';
+import {
+  COHORT_LABELS, ROLE_LABELS, SECTION_LABELS,
+  cohortOf, combinedOpportunity, displayTitle, opportunityLevel,
+  opportunityScore, plainLanguage, sectionOf, type Cohort, type PageSection,
+} from '@cro/shared';
 import type { ReportState } from '@/lib/report-state';
-import { ROLE_LABELS, isPublishableFinding, visibleRecommendations, visibleSummary } from '@cro/shared';
-import { Recommendations } from './Recommendations';
-import { CompleteAuditPreview } from './CompleteAuditPreview';
+import { CheckShot } from './CheckShot';
+import { AdvancedFindings, BOOKING_PATH } from './AdvancedFindings';
+import { DeeperAudit } from './DeeperAudit';
 import '../report.css';
 
+/** Share of each page section's opportunities whose fix is locked. */
+const LOCKED_SHARE = 0.2;
+const SECTIONS: PageSection[] = ['home', 'collection', 'product'];
+
+type Item = { check: Check; score: number; locked: boolean };
+
+function levelTone(score: number) {
+  const level = opportunityLevel(score);
+  return level === 'High' ? 'high' : level === 'Moderate' ? 'mid' : 'low';
+}
+
+function OpportunityRing({ score }: { score: number }) {
+  const r = 52;
+  const c = 2 * Math.PI * r;
+  return (
+    <div className={`rp-ring opp-${levelTone(score)}`} role="img" aria-label={`Conversion opportunity score ${score} out of 100`}>
+      <svg viewBox="0 0 120 120" aria-hidden="true">
+        <circle cx="60" cy="60" r={r} className="rp-ring-track" />
+        <circle cx="60" cy="60" r={r} className="rp-ring-value" strokeDasharray={`${(score / 100) * c} ${c}`} />
+      </svg>
+      <div><strong>{score}</strong><span>/ 100</span></div>
+    </div>
+  );
+}
+
+function ScoreBadge({ score, highlight }: { score: number; highlight?: boolean }) {
+  return (
+    <span className={`rp-opp opp-${levelTone(score)}${highlight ? ' rp-opp-hl' : ''}`} title="Opportunity score: how much fixing this could help, relative to other items">
+      <small>Opportunity</small> {score}
+    </span>
+  );
+}
+
+function OpportunityCard({ item, shots, repeatShot }: { item: Item; shots: ReportState['shots']; repeatShot: boolean }) {
+  const { check, score, locked } = item;
+  const text = plainLanguage(check);
+  return (
+    <article className={`rp-op${locked ? ' is-locked' : ''}`} id={`op-${check.id}`}>
+      <div className="rp-op-head">
+        <h4>{displayTitle(check)}</h4>
+        <ScoreBadge score={score} highlight={locked} />
+      </div>
+      <p className="rp-op-found">{text.found}</p>
+      {text.why && <p className="rp-op-why"><strong>Why it matters</strong>{text.why}</p>}
+      {text.fix && (
+        locked ? (
+          <div className="rp-op-fix rp-fix-locked">
+            <div className="rp-fix-blur" aria-hidden="true"><strong>How to fix</strong>{text.fix}</div>
+            <a className="rp-fix-unlock" href={BOOKING_PATH}>
+              <span aria-hidden="true">🔒</span> Book a full audit to unlock this fix
+              <ScoreBadge score={score} highlight />
+            </a>
+          </div>
+        ) : (
+          <p className="rp-op-fix"><strong>How to fix</strong>{text.fix}</p>
+        )
+      )}
+      {repeatShot ? <p className="rp-shot-repeat">See the screenshot above.</p> : <CheckShot check={check} shots={shots} />}
+    </article>
+  );
+}
+
 export default function AuditReport({ state, createdAt, partial }: { state: ReportState; createdAt: string; partial: boolean }) {
-  const visible = state.checks.filter(isPublishableFinding);
-  const deeper = state.checks.filter(check => !isPublishableFinding(check));
-  const recommendations = visibleRecommendations(state.recommendations, state.checks);
-  let domain = state.url || 'Your store';
-  try { domain = new URL(domain).hostname; } catch {}
-  return <div className="mm-report"><div className="mm-watermark" aria-hidden="true">monkeyman</div><main className="mm-sheet">
-    <nav className="mm-top"><a className="mm-logo" href="/">monkey<span>man</span></a><span>VISIBLE EXPERIENCE / INSTANT REVIEW</span></nav>
-    <header className="mm-cover"><div><div className="mm-eyebrow">A clearer view of the first impression</div><h1>Your store.<br /><em>A closer look.</em></h1><p className="mm-domain">{domain}</p><p className="mm-date">Prepared {new Date(createdAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' })} by Monkeyman</p></div><div className={`mm-seal ${state.scorecard ? (state.scorecard.overall >= 90 ? 'score-green' : 'score-yellow') : 'score-pending'}`}><span>AUTOMATED DIAGNOSTIC SCORE</span><strong>{state.scorecard?.overall ?? '--'}</strong><small>out of 100</small><p>90–100: green · Below 90: yellow.<br />Includes blurred checks.<br />Not a conversion prediction.</p></div></header>
-    <div className="mm-stats"><div><strong>{visible.length}</strong><span>direct observations</span></div><div><strong>{deeper.length}</strong><span>deeper diagnostics</span></div><div><strong>{state.targets.length}</strong><span>pages sampled</span></div></div>
-    {partial && <div className="notice">This visit was incomplete. Only eligible observations are shown; incomplete page views do not produce visible findings.</div>}
-    <div className="mm-sectionlabel">01 / DIRECTLY OBSERVED</div>
-    <p>{visibleSummary(state.checks)}</p>
-    {visible.length === 0 && <section className="panel"><h2>A shorter report is the honest result</h2><p>No directly supported visible finding is available in this saved report. Older reports do not contain the new visibility evidence. Start a fresh audit to collect it.</p><a href="/">Run a fresh instant audit</a></section>}
-    <Recommendations summary={null} recommendations={recommendations} writing={false} />
-    {visible.length > 0 && <section className="panel"><h2>What we observed</h2><p>Each item records a specific element, duplicated loader reference, or confirmed browser request pattern. Suggestions are not proof of lost sales.</p><ol className="recs">{visible.map(check => <li className="rec" key={check.id}><h3>{check.title}</h3><p>{check.detail}</p><p className="fix"><strong>Suggested improvement: </strong>{String(check.evidence.suggestion)}</p><p className="review-note">{ROLE_LABELS[check.scope as keyof typeof ROLE_LABELS] || 'Page'} · {String(check.evidence.viewport)} · <a href={String(check.evidence.url)} target="_blank" rel="noopener noreferrer">View sampled page</a></p></li>)}</ol></section>}
-    <div className="mm-sectionlabel">02 / COMPLETE AUDIT PREVIEW</div>
-    <CompleteAuditPreview checks={deeper} scorecard={state.scorecard} />
-    {state.shots.length > 0 && <section className="panel"><h2>The captured page views</h2><div className="shots">{state.shots.map(shot => <figure className="shot" key={shot.role + shot.viewport}><figcaption>{ROLE_LABELS[shot.role]} / {shot.viewport}</figcaption><div className="mm-shot"><img src={shot.dataUri} alt={ROLE_LABELS[shot.role] + ' on ' + shot.viewport} /><span aria-hidden="true">monkeyman</span></div></figure>)}</div></section>}
-    <section className="panel mm-method"><h2>Scope of this instant review</h2><p>We sampled initial page views, not a complete buying journey. A closed cart drawer does not mean the site has no cart drawer. Cart, checkout, payment behavior and analytics configuration require separate verification.</p><p>The visible review prioritizes specific text and interface observations. Ambiguous backgrounds, obscured elements and unstable measurements are withheld. Design suggestions require testing with your users.</p><p>The score retains the automated diagnostics, including the blurred section. It is a provisional indicator, not a verified defect count or an accessibility certification.</p><ul>{state.targets.map(target => <li key={target.url + target.role}><b>{ROLE_LABELS[target.role]}</b> <a href={target.url} target="_blank" rel="noopener noreferrer">{target.url}</a></li>)}</ul></section>
-    <footer className="mm-footer"><div className="mm-logo">monkey<span>man</span></div><p>A few clear observations. A useful next step.</p><a href="mailto:hello@monkeyman.agency">hello@monkeyman.agency</a></footer>
-  </main></div>;
+  let domain = state.url || 'your store';
+  try { domain = new URL(domain).hostname.replace(/^www\./, ''); } catch {}
+  const date = new Date(createdAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' });
+
+  // Only shortcomings: flagged checks, scored and sorted by opportunity.
+  const flagged = state.checks
+    .filter((c) => c.status === 'fail' || c.status === 'warn')
+    .map((check) => ({ check, score: opportunityScore(check) }))
+    .sort((a, b) => b.score - a.score);
+
+  // Per page section; the top ~20% of each section have their fix locked.
+  const bySection = SECTIONS.map((section) => {
+    const own = flagged.filter((f) => sectionOf(f.check) === section);
+    const lockedCount = own.length ? Math.ceil(own.length * LOCKED_SHARE) : 0;
+    const items: Item[] = own.map((f, i) => ({ ...f, locked: i < lockedCount }));
+    const cohorts = new Map<Cohort, Item[]>();
+    for (const item of items) {
+      const key = cohortOf(item.check);
+      cohorts.set(key, [...(cohorts.get(key) ?? []), item]);
+    }
+    const cohortList = [...cohorts.entries()]
+      .map(([cohort, list]) => ({ cohort, items: list, score: combinedOpportunity(list.map((i) => i.score)) }))
+      .sort((a, b) => b.score - a.score);
+    return { section, items, cohorts: cohortList, score: combinedOpportunity(items.map((i) => i.score)) };
+  }).filter((s) => s.items.length > 0);
+
+  const overall = combinedOpportunity(flagged.map((f) => f.score), 5);
+  const top = flagged.slice(0, 3);
+  const cohortCount = bySection.reduce((s, sec) => s + sec.cohorts.length, 0);
+
+  // Show each picture once: neighbouring findings often share a screenshot.
+  const shownShots = new Set<string>();
+  const isRepeat = (c: Check) => {
+    if (!c.shot) return false;
+    const key = c.shot.dataUri ? c.shot.dataUri.slice(-80) : `${c.shot.role}-${c.shot.viewport}`;
+    if (shownShots.has(key)) return true;
+    shownShots.add(key);
+    return false;
+  };
+
+  return (
+    <div className="rp">
+      <header className="rp-bar">
+        <a className="rp-logo" href="/">monkey<span>man</span></a>
+        <span className="rp-bar-title">Conversion audit · {domain}</span>
+      </header>
+
+      <main className="rp-sheet">
+        <section className="rp-hero">
+          <div className="rp-hero-text">
+            <p className="rp-eyebrow">Conversion opportunity report</p>
+            <h1>{domain}</h1>
+            <p className="rp-meta">Prepared {date} by Monkeyman · we checked {state.targets.length} page{state.targets.length === 1 ? '' : 's'} on a phone and a computer</p>
+            <ul className="rp-pages">
+              {state.targets.map((t) => (
+                <li key={t.url}><span>{ROLE_LABELS[t.role]}</span><a href={t.url} target="_blank" rel="noopener noreferrer">{t.url.replace(/^https?:\/\/(www\.)?/, '')}</a></li>
+              ))}
+            </ul>
+          </div>
+          <div className="rp-hero-score">
+            <OpportunityRing score={overall} />
+            <p className={`rp-verdict opp-${levelTone(overall)}`}>{opportunityLevel(overall)} opportunity</p>
+            <p className="rp-hero-note">{flagged.length} things to improve, in {cohortCount} groups. A higher score means more room to win extra sales.</p>
+          </div>
+        </section>
+
+        {partial && <div className="rp-notice">Part of this visit did not finish in time, so a few items could not be checked.</div>}
+
+        {top.length > 0 && (
+          <section className="rp-section">
+            <h2>Your biggest opportunities</h2>
+            <ol className="rp-top">
+              {top.map((f, i) => (
+                <li key={f.check.id}>
+                  <a href={`#op-${f.check.id}`}>
+                    <span className="rp-top-num">{i + 1}</span>
+                    <span className="rp-top-title">{displayTitle(f.check)}<small>{SECTION_LABELS[sectionOf(f.check)]}</small></span>
+                    <ScoreBadge score={f.score} />
+                  </a>
+                </li>
+              ))}
+            </ol>
+          </section>
+        )}
+
+        {bySection.map((sec) => (
+          <section key={sec.section} className="rp-section rp-page" id={`page-${sec.section}`}>
+            <div className="rp-page-head">
+              <h2>{SECTION_LABELS[sec.section]}</h2>
+              <ScoreBadge score={sec.score} />
+            </div>
+            {sec.cohorts.map((co) => (
+              <div key={co.cohort} className="rp-cohort">
+                <div className="rp-cohort-head">
+                  <h3>{COHORT_LABELS[co.cohort]}</h3>
+                  <span className="rp-cohort-meta">{co.items.length} item{co.items.length === 1 ? '' : 's'}</span>
+                  <ScoreBadge score={co.score} />
+                </div>
+                {co.items.map((item) => <OpportunityCard key={item.check.id} item={item} shots={state.shots} repeatShot={isRepeat(item.check)} />)}
+              </div>
+            ))}
+          </section>
+        ))}
+
+        {flagged.length === 0 && (
+          <section className="rp-section"><h2>No shortcomings found</h2><p className="rp-lede">Nothing we checked needs fixing right now.</p></section>
+        )}
+
+        <AdvancedFindings />
+
+        <DeeperAudit domain={domain} />
+
+        <section className="rp-section rp-method">
+          <h2>How this report works</h2>
+          <p>We visited your {state.targets.length === 1 ? 'page' : 'homepage, a collection page and a product page'} with an automated browser on a phone-sized and a computer screen, and on the product page we added one item to the bag to see what a shopper gets back (no order is placed, and your analytics are not affected). Only things worth improving are listed. Each has an opportunity score from 0 to 100: an estimate of how much fixing it could help compared with the other items, not a sales forecast.</p>
+        </section>
+      </main>
+    </div>
+  );
 }

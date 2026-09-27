@@ -28,7 +28,106 @@ export function ecommerceRules(ctx: RuleContext): Check[] {
 
   out.push(...productChecks(product));
   out.push(...collectionChecks(collection));
+  out.push(...cartChecks(product?.cartProbe ?? null));
 
+  return out;
+}
+
+/**
+ * What happens after "Add to bag", from the one tap the collector makes on
+ * the product page. When the tap could not be completed automatically the
+ * result is `na`, never a finding about the store.
+ */
+export function cartChecks(probe: PageEvidence['cartProbe'] | null): Check[] {
+  if (!probe || probe.status === 'failed') {
+    return [
+      skipped(
+        'ecommerce.cartTest',
+        'ecommerce',
+        'What happens after Add to bag',
+        probe?.reason
+          ? `The add-to-bag step could not be tested automatically: ${probe.reason}`
+          : 'The add-to-bag step was not tested on this audit.',
+      ),
+    ];
+  }
+  const picked = probe.selections.length ? ` after choosing ${probe.selections.join(' / ')}` : '';
+  const evidenceBase = { selections: probe.selections.join(' / '), button: probe.buttonText, view: probe.kind, trackingBlocked: probe.trackingBlocked ?? null };
+
+  if (probe.status === 'no-feedback') {
+    return [
+      check({
+        id: 'ecommerce.cartFeedback',
+        category: 'ecommerce',
+        title: 'Adding to bag gives clear feedback',
+        status: 'warn',
+        weight: 1.25,
+        scope: 'product',
+        detail: `Tapping "${probe.buttonText}"${picked} showed no bag drawer, cart page or confirmation message within 5 seconds. A subtle counter change may have been missed, but a shopper may be unsure the item was added.`,
+        evidence: evidenceBase,
+      }),
+    ];
+  }
+
+  if (probe.kind === 'toast') {
+    // A confirmation message instead of a drawer: clear feedback, but there
+    // is no bag view to inspect, so the drawer checks do not apply.
+    return [
+      check({
+        id: 'ecommerce.cartFeedback',
+        category: 'ecommerce',
+        title: 'Adding to bag gives clear feedback',
+        status: 'pass',
+        weight: 1.25,
+        scope: 'product',
+        detail: `Tapping "${probe.buttonText}"${picked} showed a confirmation${probe.reason ? ` ("${probe.reason}")` : ''} rather than opening a bag drawer.`,
+        evidence: evidenceBase,
+      }),
+    ];
+  }
+
+  const where = probe.kind === 'drawer' ? 'bag drawer' : 'cart page';
+  const out: Check[] = [
+    check({
+      id: 'ecommerce.cartFeedback',
+      category: 'ecommerce',
+      title: 'Adding to bag gives clear feedback',
+      // The drawer opening is the feedback. A missing checkout button is not
+      // claimed: checkout apps often draw it inside closed shadow DOM or
+      // cross-origin frames that cannot be read (Allbirds' "Checkout+").
+      status: 'pass',
+      weight: 1.25,
+      scope: 'product',
+      detail: probe.hasCheckout
+        ? `Tapping "${probe.buttonText}"${picked} opened a ${where} with a checkout button${probe.checkoutText ? ` ("${probe.checkoutText}")` : ''}.`
+        : `Tapping "${probe.buttonText}"${picked} opened a ${where}. (Its checkout button could not be read automatically; see the screenshot.)`,
+      evidence: { ...evidenceBase, checkout: probe.hasCheckout, checkoutText: probe.checkoutText },
+    }),
+    check({
+      id: 'ecommerce.cartContinue',
+      category: 'ecommerce',
+      title: 'Shoppers can keep browsing from the bag',
+      status: probe.hasContinueShopping ? 'pass' : 'warn',
+      weight: 0.75,
+      scope: 'product',
+      detail: probe.hasContinueShopping
+        ? `The ${where} offers a "continue shopping" route back to the store.`
+        : `The ${where} has no "continue shopping" link or button${probe.kind === 'drawer' ? '; the only way back to browsing is closing it' : ''}. Shoppers who want to add more items have no prompt to do so.`,
+      evidence: { ...evidenceBase, continueShopping: probe.hasContinueShopping },
+    }),
+    check({
+      id: 'ecommerce.cartCrossSell',
+      category: 'ecommerce',
+      title: 'The bag suggests related products',
+      status: probe.hasRecommendations ? 'pass' : 'warn',
+      weight: 0.75,
+      scope: 'product',
+      detail: probe.hasRecommendations
+        ? `The ${where} suggests other products.`
+        : `The ${where} shows no product suggestions (such as "complete the look" or "you may also like"), so there is no prompt to add a second item.`,
+      evidence: { ...evidenceBase, recommendations: probe.hasRecommendations },
+    }),
+  ];
   return out;
 }
 
@@ -82,7 +181,9 @@ function productChecks(page: PageEvidence | null): Check[] {
       weight: 2,
       scope: 'product',
       detail: e.addToCartAboveFold
-        ? `"${e.addToCartText}" is visible above the fold at 390px.`
+        ? e.stickyBuyBar
+          ? `A sticky buy bar is on screen on arrival at 390px, so the buy action ("${e.addToCartText}") is reachable without scrolling.`
+          : `"${e.addToCartText}" is visible above the fold at 390px.`
         : e.addToCartText
           ? `"${e.addToCartText}" sits below the fold on mobile. On a product page the buy button should never require a scroll to find.`
           : 'No add-to-cart button was found on the product page.',
@@ -114,16 +215,19 @@ function productChecks(page: PageEvidence | null): Check[] {
       id: 'ecommerce.socialProof',
       category: 'ecommerce',
       title: 'Product carries ratings or reviews',
-      status: e.reviewWidget && e.ratingText ? 'pass' : e.reviewWidget ? 'warn' : 'fail',
+      // Three sources, any of which proves reviews exist: text on the page at
+      // load, text after the page was scrolled, or the product's structured
+      // data. A widget with nothing readable is "could not tell", never "empty".
+      status: e.ratingText || e.structuredRating ? 'pass' : e.reviewWidget ? 'na' : 'fail',
       weight: 1.5,
       scope: 'product',
       detail:
-        e.reviewWidget && e.ratingText
-          ? `Reviews present (${e.ratingText}).`
+        e.ratingText || e.structuredRating
+          ? `Reviews present (${e.ratingText ?? e.structuredRating}${!e.ratingText && e.structuredRating ? ', from the page\'s product data' : ''}).`
           : e.reviewWidget
-            ? 'A review widget is present but no rating or review count was readable, which suggests it is empty.'
-            : 'No reviews or ratings on the product page. For an unfamiliar brand this is usually the single largest source of hesitation before checkout.',
-      evidence: { widget: e.reviewWidget, rating: e.ratingText },
+            ? 'A review section is on the page but no rating could be read during this visit (review apps often load late), so this is not scored.'
+            : 'No reviews or ratings were found on the product page: none on screen after scrolling, and none in the page\'s product data. For an unfamiliar brand this is often a major source of hesitation.',
+      evidence: { widget: e.reviewWidget, rating: e.ratingText, structuredRating: e.structuredRating },
     }),
   );
 
@@ -230,7 +334,7 @@ function collectionChecks(page: PageEvidence | null): Check[] {
       title: 'Prices are shown on the category grid',
       status:
         e.productTiles === 0
-          ? 'warn'
+          ? 'na'
           : e.tilesWithPrice >= e.productTiles * 0.8
             ? 'pass'
             : e.tilesWithPrice > 0
@@ -240,7 +344,7 @@ function collectionChecks(page: PageEvidence | null): Check[] {
       scope: 'collection',
       detail:
         e.productTiles === 0
-          ? 'No product tiles were detected on the collection page.'
+          ? 'The product grid could not be read during this visit (it may render late), so tile prices were not checked.'
           : `${e.tilesWithPrice} of ${e.productTiles} product tiles show a price. Shoppers filter by price before they click; a grid without prices forces a round trip for every comparison.`,
       evidence: { tiles: e.productTiles, withPrice: e.tilesWithPrice },
     }),
@@ -251,11 +355,14 @@ function collectionChecks(page: PageEvidence | null): Check[] {
       id: 'ecommerce.browseTools',
       category: 'ecommerce',
       title: 'Shoppers can filter and sort',
-      status: e.hasFilters && e.hasSort ? 'pass' : e.hasFilters || e.hasSort ? 'warn' : 'fail',
+      // Not judged when the grid itself could not be read: the page may not have finished rendering.
+      status: e.productTiles === 0 ? 'na' : e.hasFilters && e.hasSort ? 'pass' : e.hasFilters || e.hasSort ? 'warn' : 'fail',
       weight: 1.25,
       scope: 'collection',
       detail:
-        e.hasFilters && e.hasSort
+        e.productTiles === 0
+          ? 'The category page had not finished rendering its product grid, so filtering and sorting were not checked.'
+          : e.hasFilters && e.hasSort
           ? 'Both filtering and sorting are available on the category page.'
           : `Missing ${!e.hasFilters ? 'filters' : ''}${!e.hasFilters && !e.hasSort ? ' and ' : ''}${!e.hasSort ? 'sorting' : ''}. Once a category runs past about twenty items, browsing without these becomes scrolling.`,
       evidence: { filters: e.hasFilters, sort: e.hasSort },

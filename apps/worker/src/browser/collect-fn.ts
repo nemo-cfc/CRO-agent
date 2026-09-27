@@ -28,6 +28,18 @@ export function collectFn(): CollectResult {
   const text = (el: Element | null): string =>
     (el?.textContent ?? '').replace(/\s+/g, ' ').trim();
 
+  /**
+   * Tag the exact element a check measured so the collector can crop a
+   * screenshot of it afterwards. Keys are space-separated in one attribute.
+   */
+  document.querySelectorAll('[data-cro-shot]').forEach((el) => el.removeAttribute('data-cro-shot'));
+  const mark = (el: Element | null | undefined, key: string) => {
+    if (!el) return;
+    const keys = (el.getAttribute('data-cro-shot') ?? '').split(' ').filter(Boolean);
+    if (keys.indexOf(key) === -1) keys.push(key);
+    el.setAttribute('data-cro-shot', keys.join(' '));
+  };
+
   const parseColor = (c: string): [number, number, number, number] | null => {
     const m = c.match(/rgba?\(([^)]+)\)/);
     if (!m || !m[1]) return null;
@@ -55,9 +67,39 @@ export function collectFn(): CollectResult {
     return 0.2126 * f(rgb[0]) + 0.7152 * f(rgb[1]) + 0.0722 * f(rgb[2]);
   };
 
+  /**
+   * Contrast against the colour actually behind the text, or null when that
+   * cannot be known from styles: a background image, or a photo/video element
+   * painted between the text and the nearest solid background. Assuming white
+   * there produced "Shop Now has a contrast ratio of 1:1" for white text on a
+   * photo.
+   */
   const contrastRatio = (el: Element): number | null => {
     const fg = parseColor(getComputedStyle(el).color);
-    if (!fg) return null;
+    if (!fg || fg[3] < 1) return null;
+    let owner: Element | null = null;
+    for (let n: Element | null = el; n; n = n.parentElement) {
+      const s = getComputedStyle(n);
+      if (s.backgroundImage !== 'none') return null;
+      const c = parseColor(s.backgroundColor);
+      if (c && c[3] > 0 && c[3] < 1) return null;
+      if (c && c[3] === 1) { owner = n; break; }
+    }
+    const r = el.getBoundingClientRect();
+    if (r.bottom <= 0 || r.top >= VH || r.right <= 0 || r.left >= VW) return null;
+    // Any media or painted layer inside the background's owner that overlaps
+    // the text sits between the text and that colour. Hit-testing is not used:
+    // hero images are usually pointer-events:none, which hit-testing skips.
+    const root = owner ?? document.body;
+    const overlaps = (o: Element) => {
+      const q = o.getBoundingClientRect();
+      return q.width > 0 && q.height > 0 && q.left < r.right && q.right > r.left && q.top < r.bottom && q.bottom > r.top;
+    };
+    for (const layer of Array.from(root.querySelectorAll('img, video, picture, canvas, iframe, svg, [style*="background"]')).slice(0, 400)) {
+      if (layer.contains(el) || el.contains(layer) || !overlaps(layer)) continue;
+      if (/^(IMG|VIDEO|PICTURE|CANVAS|IFRAME)$/i.test(layer.tagName) || getComputedStyle(layer).backgroundImage !== 'none') return null;
+      if (layer.tagName.toLowerCase() === 'svg' && layer.getBoundingClientRect().width > r.width * 2) return null;
+    }
     const bg = effectiveBg(el);
     const l1 = relLum([fg[0], fg[1], fg[2]]);
     const l2 = relLum(bg);
@@ -87,14 +129,21 @@ export function collectFn(): CollectResult {
     document.querySelectorAll<HTMLElement>(
       'a, button, input[type="submit"], input[type="button"], [role="button"]',
     ),
-  ).filter(visible);
+  ).filter(
+    // Hidden from users: aria-hidden carousel clones, inert or click-through layers.
+    (el) => visible(el) && !el.closest('[aria-hidden="true"], [inert]') && getComputedStyle(el).pointerEvents !== 'none',
+  );
 
-  const ctas = ctaNodes
+  // Visible label only: textContent also returns hidden loading text such as
+  // "Adding..." inside a buy button.
+  const shownText = (el: HTMLElement) => (el.innerText ?? '').replace(/\s+/g, ' ').trim();
+
+  const rankedCtas = ctaNodes
     .map((el) => {
       const r = el.getBoundingClientRect();
       const s = getComputedStyle(el);
       const label =
-        text(el) ||
+        shownText(el) ||
         el.getAttribute('aria-label') ||
         (el as HTMLInputElement).value ||
         '';
@@ -109,15 +158,19 @@ export function collectFn(): CollectResult {
       if (Number.parseFloat(s.paddingLeft) >= 12) prominence += 1;
       if (Number.parseFloat(s.fontSize) >= 16) prominence += 1;
       if (s.fontWeight === 'bold' || Number(s.fontWeight) >= 600) prominence += 1;
-      if (r.top < VH) prominence += 2;
+      // On screen means inside the viewport horizontally too: carousel slides
+      // parked off to the side used to count as above-the-fold actions.
+      const onScreen = r.top < VH && r.bottom > 0 && r.left < VW - 4 && r.right > 4;
+      if (onScreen) prominence += 2;
       if (el.closest('nav, header nav, footer')) prominence -= 3;
       if (GENERIC_CTA.test(label) && !ACTION_VERBS.test(label)) prominence -= 1;
 
       return {
+        el,
         text: label.slice(0, 80),
         tag: el.tagName.toLowerCase(),
         href: el.getAttribute('href'),
-        aboveFold: r.top < VH && r.top + r.height > 0,
+        aboveFold: onScreen,
         width: Math.round(r.width),
         height: Math.round(r.height),
         contrast: contrastRatio(el),
@@ -127,6 +180,12 @@ export function collectFn(): CollectResult {
     .filter((c) => c.text.length > 0)
     .sort((a, b) => b.prominence - a.prominence)
     .slice(0, 25);
+  // ctas[0] is the element the CTA rules treat as the primary action.
+  mark(rankedCtas[0]?.el, 'cta');
+  const ctas = rankedCtas.map((c) => ({
+    text: c.text, tag: c.tag, href: c.href, aboveFold: c.aboveFold,
+    width: c.width, height: c.height, contrast: c.contrast, prominence: c.prominence,
+  }));
 
   /* ---------------------------------------------------------------- *
    * Forms
@@ -180,13 +239,13 @@ export function collectFn(): CollectResult {
 
   // The "primary" form is the one a visitor is most likely meant to fill in:
   // the one with the most visible fields. Search boxes lose to lead forms.
-  const primaryForm =
-    formEls.length > 0
-      ? formEls
-          .map(describeForm)
-          .sort((a, b) => b.fields - a.fields)
-          .find((f) => f.fields > 0) ?? null
-      : null;
+  const primaryFormEntry =
+    formEls
+      .map((el) => ({ el, form: describeForm(el) }))
+      .sort((a, b) => b.form.fields - a.form.fields)
+      .find((f) => f.form.fields > 0) ?? null;
+  mark(primaryFormEntry?.el, 'form');
+  const primaryForm = primaryFormEntry?.form ?? null;
 
   /* ---------------------------------------------------------------- *
    * Performance
@@ -310,22 +369,30 @@ export function collectFn(): CollectResult {
       const s = getComputedStyle(el);
       return s.display !== 'inline';
     })
-    .slice(0, 150)
-    .map((el) => el.getBoundingClientRect())
-    .filter((r) => r.width > 0 && r.height > 0);
+    .map((el) => ({ r: el.getBoundingClientRect(), href: el.getAttribute('href')?.split(/[?#]/)[0] ?? null }))
+    // On screen horizontally: carousel slides parked off to the side are not
+    // something a visitor can tap.
+    .filter(({ r }) => r.width > 0 && r.height > 0 && r.left < VW - 2 && r.right > 2)
+    .slice(0, 150);
 
-  const tinyTapTargets = tapTargets.filter((r) => r.width < 44 || r.height < 44).length;
+  const tinyTapTargets = tapTargets.filter(({ r }) => r.width < 44 || r.height < 44).length;
 
-  let crowdedTapTargets = 0;
+  // Targets (not pairs) with a *different* target within 8px. Overlapping
+  // boxes are one control (an icon inside a link) and two links to the same
+  // place (a product's image and title) cannot cause a wrong tap.
+  const crowded = new Set<number>();
   for (let i = 0; i < tapTargets.length; i++) {
     for (let j = i + 1; j < tapTargets.length; j++) {
       const a = tapTargets[i]!;
       const b = tapTargets[j]!;
-      const dx = Math.max(0, Math.max(a.left - b.right, b.left - a.right));
-      const dy = Math.max(0, Math.max(a.top - b.bottom, b.top - a.bottom));
-      if (dx < 8 && dy < 8) crowdedTapTargets++;
+      if (a.href && a.href === b.href) continue;
+      const dx = Math.max(a.r.left - b.r.right, b.r.left - a.r.right);
+      const dy = Math.max(a.r.top - b.r.bottom, b.r.top - a.r.bottom);
+      if (dx < 0 && dy < 0) continue; // overlapping: nested or stacked control
+      if (Math.max(0, dx) < 8 && Math.max(0, dy) < 8) { crowded.add(i); crowded.add(j); }
     }
   }
+  const crowdedTapTargets = crowded.size;
 
   const stickyCta = Array.from(document.querySelectorAll<HTMLElement>('*')).some((el) => {
     const s = getComputedStyle(el);
@@ -343,33 +410,67 @@ export function collectFn(): CollectResult {
   const CHAT_RE =
     /intercom|drift|crisp|tawk|zendesk|hubspot-messages|livechat|freshchat|tidio|olark|helpscout|chatway/i;
 
-  const overlayCandidates = Array.from(document.querySelectorAll<HTMLElement>('body *')).filter(
-    (el) => {
-      const s = getComputedStyle(el);
-      if (s.position !== 'fixed' && s.position !== 'absolute') return false;
-      if (Number.parseInt(s.zIndex, 10) < 100) return false;
-      return visible(el);
-    },
-  );
-
-  let largestOverlayCoverage = 0;
-  let blockingOverlays = 0;
-  for (const el of overlayCandidates.slice(0, 300)) {
+  /**
+   * Pop-ups on arrival. A layer only counts when a visitor can actually see
+   * and hit it: fixed, painted (background, backdrop blur or visible content),
+   * and not `pointer-events: none`. Transparent containers for closed menus
+   * used to be counted as full-screen overlays, and a modal's dim backdrop was
+   * counted as a second overlay; both are handled here.
+   */
+  const coverageOf = (el: Element) => {
     const r = el.getBoundingClientRect();
     const w = Math.max(0, Math.min(r.right, VW) - Math.max(r.left, 0));
     const h = Math.max(0, Math.min(r.bottom, VH) - Math.max(r.top, 0));
-    const coverage = (w * h) / (VW * VH);
-    if (coverage > largestOverlayCoverage) largestOverlayCoverage = coverage;
-    if (coverage > 0.2) blockingOverlays++;
-  }
-
-  const openDialogs = Array.from(
-    document.querySelectorAll('dialog[open], [role="dialog"], [aria-modal="true"]'),
-  ).filter(visible).length;
-
-  const cookieBanner = overlayCandidates.some((el) =>
-    /cookie|consent|gdpr|privacy preference/i.test(text(el).slice(0, 400)),
+    return (w * h) / (VW * VH);
+  };
+  const paints = (el: HTMLElement, s: CSSStyleDeclaration) => {
+    const bg = parseColor(s.backgroundColor);
+    if (bg && bg[3] > 0.05) return true;
+    if (s.backgroundImage !== 'none' || (s.backdropFilter && s.backdropFilter !== 'none')) return true;
+    return false;
+  };
+  const hasVisibleContent = (el: HTMLElement) =>
+    Array.from(el.querySelectorAll('h1, h2, h3, h4, p, button, a, input, select, img, span')).some((c) => {
+      const r = c.getBoundingClientRect();
+      return r.width > 4 && r.height > 4 && visible(c) && coverageOf(c) > 0;
+    });
+  const layers = Array.from(document.querySelectorAll<HTMLElement>('body *'))
+    .filter((el) => {
+      const s = getComputedStyle(el);
+      if (s.position !== 'fixed' || s.pointerEvents === 'none' || !visible(el)) return false;
+      if (el.closest('header, nav') && coverageOf(el) < 0.2) return false; // sticky header bars
+      return coverageOf(el) > 0.1 && (paints(el, s) || hasVisibleContent(el));
+    })
+    .slice(0, 200);
+  // Outermost layers only, so a modal's inner panel is not a second pop-up.
+  const outer = layers.filter((el) => !layers.some((o) => o !== el && o.contains(el)));
+  const POPUP_KIND: [RegExp, string][] = [
+    [/cookie|consent|gdpr|privacy preference|we use cookies/i, 'cookie'],
+    [/shipping to|ship to|your country|your region|currency|choose (a |your )?(country|region|location)|shopping in|select (your )?(country|region)|language/i, 'locale'],
+    [/sign ?up|subscribe|newsletter|% off|discount|join (the|our)|get \d+|email address|your email/i, 'email'],
+    [/verify your age|\bare you (21|18)|of legal (drinking )?age|\b(21|18)\+/i, 'age'],
+  ];
+  const popups = outer
+    .map((el) => {
+      const t = text(el);
+      const kind = t.length < 3 ? 'backdrop' : (POPUP_KIND.find(([re]) => re.test(t.slice(0, 600)))?.[1] ?? 'other');
+      return { kind, coverage: Math.round(coverageOf(el) * 100) / 100, text: t.slice(0, 120) };
+    })
+    .filter((p) => p.kind === 'backdrop' ? p.coverage > 0.5 : p.coverage > 0.1);
+  const content = popups.filter((p) => p.kind !== 'backdrop');
+  const backdrop = popups.find((p) => p.kind === 'backdrop');
+  // A dimmed backdrop blocks the whole page, so it sets the coverage of the
+  // pop-up it sits behind; it is never counted as a pop-up of its own.
+  const overlays = content.map((p) =>
+    backdrop && p.kind !== 'cookie' ? { ...p, coverage: Math.max(p.coverage, backdrop.coverage) } : p,
   );
+  const blockingOverlays = overlays.filter((p) => p.coverage > 0.2).length || (backdrop ? 1 : 0);
+  const largestOverlayCoverage = Math.max(0, ...overlays.map((p) => p.coverage), backdrop?.coverage ?? 0);
+  const cookieOverlay = overlays.find((p) => p.kind === 'cookie') ?? null;
+
+  // Modal pop-ups, whether or not the theme marks them up as dialogs.
+  const openDialogs = overlays.filter((p) => p.kind !== 'cookie' && p.coverage > 0.2).length;
+  const cookieBanner = !!cookieOverlay;
 
   const chatEl = Array.from(document.querySelectorAll<HTMLElement>('iframe, div, button')).find(
     (el) =>
@@ -410,8 +511,15 @@ export function collectFn(): CollectResult {
    * Copy
    * ---------------------------------------------------------------- */
 
-  const h1El = document.querySelector('h1');
-  const h1 = text(h1El) || null;
+  // Only headings a visitor can see: themes often ship a hidden or empty H1
+  // (SEO duplicates, split promo text), which made "one clear headline" pass
+  // on pages with none and "4 headlines compete" fire on pages with one.
+  const visibleH1s = Array.from(document.querySelectorAll<HTMLElement>('h1')).filter(
+    (h) => visible(h) && shownText(h).length > 0 && !h.closest('[aria-hidden="true"]'),
+  );
+  const h1El = visibleH1s[0] ?? null;
+  const h1 = h1El ? shownText(h1El) : null;
+  if (h1El) mark(h1El, 'h1');
 
   const heroCopy =
     Array.from(document.querySelectorAll('p'))
@@ -529,19 +637,57 @@ export function collectFn(): CollectResult {
 
   const priceRect = priceNode?.getBoundingClientRect();
 
-  const cartBtn = ctaNodes.find((el) => {
-    const label = text(el) || el.getAttribute('aria-label') || (el as HTMLInputElement).value || '';
-    return ADD_TO_CART.test(label);
-  });
+  // The product's own buy button: first in page order, outside sticky bars and
+  // outside recommendation carousels (whose "Add to Cart" buttons sit far down
+  // the page and were being measured instead). Before a size is chosen many
+  // themes label it "Select a size", so that counts as the buy button too.
+  const BUY_LABEL = new RegExp(`${ADD_TO_CART.source}|^select (a |your )?(size|option)$|^choose (a )?(size|option)$`, 'i');
+  const RECS = '[class*="recommend" i], [id*="recommend" i], [class*="upsell" i], [class*="related" i], [class*="complete-the-look" i], [class*="cross-sell" i], [class*="carousel" i], [class*="slider" i], [class*="swiper" i]';
+  const inFixed = (el: Element) => {
+    for (let n: Element | null = el; n; n = n.parentElement) if (getComputedStyle(n).position === 'fixed') return true;
+    return false;
+  };
+  const buyLabel = (el: HTMLElement) => shownText(el) || el.getAttribute('aria-label') || (el as HTMLInputElement).value || '';
+  const buyButtons = ctaNodes.filter((el) => BUY_LABEL.test(buyLabel(el)) && !el.closest('header, nav, footer'));
+  const cartBtn = buyButtons.find((el) => !inFixed(el) && !el.closest(RECS)) ?? buyButtons.find((el) => !inFixed(el));
   const cartRect = cartBtn?.getBoundingClientRect();
+  // A sticky buy bar that is on screen on arrival makes the buy action
+  // reachable without scrolling, even when the main button is further down.
+  const stickyBuy = buyButtons.find((el) => {
+    const r = el.getBoundingClientRect();
+    return inFixed(el) && r.top < VH && r.bottom > 0 && r.left < VW && r.right > 0;
+  });
+  mark(priceNode, 'price');
+  mark(cartBtn, 'cart');
 
   // Variant pickers: a select, or a group of swatch/size buttons. Counted as
   // groups rather than options, since "3 choices to make" is the friction.
-  const variantGroups =
-    document.querySelectorAll('select[name*="option" i], select[id*="option" i], select[name*="variant" i]').length +
-    Array.from(
-      document.querySelectorAll('[class*="swatch" i], [class*="variant" i], [class*="option" i]'),
-    ).filter((el) => visible(el) && el.querySelectorAll('input, button, label').length >= 2).length;
+  // Choices a shopper must make before buying, counted as option groups next
+  // to the buy button: radio groups, size/colour button rows and dropdowns.
+  // Class-name matching ("swatch", "variant") missed SKIMS' size lists.
+  const variantGroups = (() => {
+    if (!cartBtn) return 0;
+    const optionLike = (el: HTMLElement) => {
+      if (el === cartBtn || el.contains(cartBtn) || !visible(el)) return false;
+      const t = shownText(el);
+      const aria = el.getAttribute('aria-label') ?? '';
+      if (/quantity|increase|decrease|wishlist|share|close|guide|chart|zoom/i.test(`${aria} ${t}`) || /^[+\-−–]$/.test(t)) return false;
+      return el.getAttribute('role') === 'radio' || (el as HTMLInputElement).type === 'radio' ||
+        /size|colou?r|option|variant|width|length|fit/i.test(aria) || (t.length > 0 && t.length <= 8);
+    };
+    const inScope = (root: Element) =>
+      Array.from(root.querySelectorAll<HTMLElement>('[role="radio"], input[type="radio"], button, [role="option"]')).filter(optionLike);
+    let scope: HTMLElement | null = cartBtn.parentElement;
+    for (let d = 0; d < 8 && scope && inScope(scope).length < 2; d++) scope = scope.parentElement;
+    if (!scope) return 0;
+    const byParent = new Map<Element, number>();
+    for (const o of inScope(scope)) {
+      const key = o.closest('[role="radiogroup"], fieldset') ?? o.parentElement?.closest('ul, ol') ?? o.parentElement ?? o;
+      byParent.set(key, (byParent.get(key) ?? 0) + 1);
+    }
+    const selects = Array.from(scope.querySelectorAll<HTMLSelectElement>('select')).filter((s) => visible(s) && s.options.length > 1).length;
+    return Array.from(byParent.values()).filter((n) => n >= 2).length + selects;
+  })();
 
   const stockMatch = allTextForCommerce().match(
     /\b(in stock|out of stock|sold out|only \d+ left|low stock|back ?order|pre-?order)\b/i,
@@ -551,19 +697,47 @@ export function collectFn(): CollectResult {
     document.querySelectorAll('[class*="gallery" i] img, [class*="product" i] img, [class*="media" i] img'),
   ).filter(visible).length;
 
-  const reviewWidget = !!document.querySelector(
-    '[class*="review" i], [class*="rating" i], [class*="stars" i], [data-reviews], [id*="judgeme" i], [class*="yotpo" i], [class*="stamped" i], [class*="okendo" i], [class*="loox" i]',
+  const REVIEW_SELECTOR =
+    '[class*="review" i], [class*="rating" i], [class*="stars" i], [data-reviews], [id*="judgeme" i], [class*="yotpo" i], [class*="stamped" i], [class*="okendo" i], [class*="loox" i]';
+  // A review app's script counts as a review section even before its widget
+  // renders (Bazaarvoice, Yotpo and others often render several seconds late),
+  // so its absence on screen is "not measured", never "no reviews".
+  const REVIEW_APPS = /bazaarvoice|yotpo|okendo|judge\.me|judgeme|stamped\.io|loox\.io|reviews\.io|trustpilot|junip|powerreviews|feefo|reevoo|rivyo|fera\.ai|trustoo|klaviyo.*reviews/i;
+  const reviewApp = Array.from(document.querySelectorAll('script[src], iframe[src], link[href]')).some((el) =>
+    REVIEW_APPS.test(el.getAttribute('src') ?? el.getAttribute('href') ?? ''),
+  );
+  const reviewWidget = !!document.querySelector(REVIEW_SELECTOR) || reviewApp;
+  // The rating display itself: the smallest visible element whose own text
+  // reads like a rating. Class names alone matched whole galleries.
+  // A zero rating or zero reviews ("0 / 5", "0 reviews") is an empty widget, not proof of reviews.
+  const RATING_TEXT = /\b([1-5](?:\.\d)?)\s*(?:out of\s*5|\/\s*5(?:\.0)?|stars?)|\b([1-9][\d,]*)\s*(?:reviews?|ratings?)/i;
+  mark(
+    Array.from(document.querySelectorAll<HTMLElement>('a, button, span, div, p'))
+      .filter((el) => {
+        const t = text(el);
+        const r = el.getBoundingClientRect();
+        // Area floor skips screen-reader-only labels that measure 1×1px.
+        return t.length > 0 && t.length <= 60 && RATING_TEXT.test(t) && r.height < 120 &&
+          r.width * r.height >= 600 && visible(el);
+      })
+      .sort((a, b) => a.getBoundingClientRect().width * a.getBoundingClientRect().height -
+        b.getBoundingClientRect().width * b.getBoundingClientRect().height)[0],
+    'rating',
   );
 
   const ratingMatch = allTextForCommerce().match(
-    /(\d(?:\.\d)?)\s*(?:out of\s*5|\/\s*5|stars?)|(\d[\d,]*)\s*(?:reviews?|ratings?)/i,
+    RATING_TEXT,
   );
 
-  // One representative link per product.
+  // One representative link per product in the page's own grid. The query
+  // string is dropped (?size=6x9 and ?size=8x10 are the same product), and
+  // links in header/nav/footer or recommendation carousels are not the grid.
+  const productPath = (href: string) => href.split(/[?#]/)[0] ?? href;
   const productLinks = new Map<string, HTMLAnchorElement>();
   for (const a of Array.from(document.querySelectorAll<HTMLAnchorElement>('a[href]'))) {
-    const href = a.getAttribute('href') ?? '';
-    if (!/\/products?\//i.test(href) || !visible(a)) continue;
+    const href = productPath(a.getAttribute('href') ?? '');
+    if (!/\/products?\/[^/]+/i.test(href) || /\/products?\/(category|categories)\//i.test(href) || !visible(a)) continue;
+    if (a.closest('header, nav, footer') || a.closest(RECS)) continue;
     if (!productLinks.has(href)) productLinks.set(href, a);
   }
 
@@ -578,13 +752,14 @@ export function collectFn(): CollectResult {
    * tile boundary whatever it happens to be called.
    */
   const tilesWithPrice = Array.from(productLinks.values()).filter((a) => {
+    if (CURRENCY.test(text(a))) return true; // the whole tile is the link
     let node: HTMLElement | null = a;
     for (let depth = 0; depth < 6 && node; depth++) {
       node = node.parentElement;
       if (!node) break;
       const hrefs = new Set(
         Array.from(node.querySelectorAll<HTMLAnchorElement>('a[href]'))
-          .map((l) => l.getAttribute('href') ?? '')
+          .map((l) => productPath(l.getAttribute('href') ?? ''))
           .filter((h) => /\/products?\//i.test(h)),
       );
       // Left this tile and entered the grid — stop before every product
@@ -597,38 +772,127 @@ export function collectFn(): CollectResult {
 
 
 
-  const hasFilters = !!document.querySelector(
-    '[class*="filter" i], [class*="facet" i], [id*="filter" i], [aria-label*="filter" i], details[class*="filter" i]',
-  );
-  const hasSort = !!document.querySelector(
+  // Controls labelled "Filter"/"Sort" count too: many themes use a plain
+  // button for them (SKIMS' "Sort" was missed by the selector-only check).
+  const controlLabelled = (re: RegExp) =>
+    Array.from(document.querySelectorAll<HTMLElement>('button, summary, [role="button"], a, label, select')).some(
+      (el) => visible(el) && !el.closest('footer') && re.test(`${shownText(el)} ${el.getAttribute('aria-label') ?? ''}`.trim()),
+    );
+  // A class name alone is not a control ("filter" is also a CSS utility and
+  // an image-effect class); require something visible a shopper can operate.
+  const operable = (selector: string) =>
+    Array.from(document.querySelectorAll<HTMLElement>(selector)).some(
+      (el) => visible(el) && !el.closest('footer') &&
+        (/^(BUTTON|SELECT|DETAILS|SUMMARY|INPUT)$/.test(el.tagName) || el.getAttribute('role') === 'button' ||
+          !!el.querySelector('button, select, input, summary, [role="button"]')),
+    );
+  // "filter" alone is also a CSS utility class (Bellroy's product tiles carry
+  // it), so class names must say what they are: facets, filter-bar, etc.
+  const FILTER_CLASS = /(^|[\s_-])(facets?|filters?-?(bar|panel|drawer|button|btn|toggle|menu|form|group|options?|list|sidebar|trigger)|collection-filters?|product-filters?)([\s_-]|$)/i;
+  const hasFilters =
+    Array.from(document.querySelectorAll<HTMLElement>('[class*="filter" i], [class*="facet" i]')).some(
+      (el) => FILTER_CLASS.test(el.className.toString()) && visible(el) && !el.closest('footer') &&
+        (/^(BUTTON|SELECT|DETAILS|SUMMARY|INPUT)$/.test(el.tagName) || !!el.querySelector('button, select, input, summary, [role="button"]')),
+    ) ||
+    operable('[aria-label*="filter" i]') ||
+    // ids only when the id is about filtering; Bellroy's product tiles have
+    // ids embedding "data-filter-dimension-style".
+    Array.from(document.querySelectorAll<HTMLElement>('[id*="filter" i], [id*="facet" i]')).some(
+      (el) => /^(filters?|facets?)([_-]|$)|[_-](filters?|facets?)$/i.test(el.id) && visible(el) &&
+        !!el.querySelector('button, select, input, summary, [role="button"]'),
+    ) ||
+    controlLabelled(/^(\+\s*)?(filters?|refine|filter (&|and) sort)\b/i);
+  const hasSort = operable(
     'select[class*="sort" i], select[name*="sort" i], [class*="sort-by" i], [aria-label*="sort" i]',
-  );
+  ) || controlLabelled(/^(\W\s*)?sort( by)?\b|filter (&|and) sort/i);
 
-  const paymentIcons = Array.from(document.querySelectorAll('img, svg')).filter((el) =>
-    /visa|mastercard|amex|paypal|klarna|afterpay|clearpay|gpay|google-?pay|apple-?pay|shop-?pay|upi|razorpay|stripe/i.test(
-      `${el.getAttribute('alt') ?? ''} ${el.getAttribute('src') ?? ''} ${el.className?.toString() ?? ''} ${el.getAttribute('aria-label') ?? ''}`,
-    ),
-  ).length;
+  const paymentIcons =
+    Array.from(document.querySelectorAll('img, svg')).filter((el) =>
+      /visa|mastercard|amex|paypal|klarna|afterpay|clearpay|gpay|google-?pay|apple-?pay|shop-?pay|upi|razorpay|stripe/i.test(
+        `${el.getAttribute('alt') ?? ''} ${el.getAttribute('src') ?? ''} ${el.className?.toString() ?? ''} ${el.getAttribute('aria-label') ?? ''}`,
+      ),
+    ).length +
+    // Payment messaging widgets count as payment marks too (Ruggable's
+    // Klarna placement sits right under the price).
+    Array.from(
+      document.querySelectorAll('klarna-placement, afterpay-placement, shopify-payment-terms, shop-pay-installments-banner, [class*="klarna" i], [class*="afterpay" i], [class*="payment-terms" i], [class*="installment" i]'),
+    ).filter((el) => visible(el) && !el.closest('footer')).length;
 
   function allTextForCommerce(): string {
     return allText;
   }
 
+  // The same price shown anywhere on screen on arrival (e.g. in a sticky bar)
+  // counts as visible without scrolling.
+  const priceDigits = priceNode ? text(priceNode).replace(/[^\d]/g, '') : '';
+  const priceOnScreen = priceCandidates.some((el) => {
+    const r = el.getBoundingClientRect();
+    return r.top < VH && r.bottom > 0 && r.left < VW && r.right > 0 && !!priceDigits &&
+      text(el).replace(/[^\d]/g, '') === priceDigits;
+  });
+
+  // Rating published in the page's product data (review apps often render
+  // their on-page widget seconds after load, but the JSON-LD is there).
+  let structuredRating: string | null = null;
+  for (const node of Array.from(document.querySelectorAll('script[type="application/ld+json"]'))) {
+    let data: unknown;
+    try { data = JSON.parse(node.textContent ?? ''); } catch { continue; }
+    // Walk the whole document: the rating is often nested (aggregateRating
+    // with an itemReviewed object inside it), which a flat pattern cannot read.
+    const stack: unknown[] = [data];
+    while (stack.length && !structuredRating) {
+      const o = stack.pop();
+      if (Array.isArray(o)) { stack.push(...o); continue; }
+      if (!o || typeof o !== 'object') continue;
+      const rec = o as Record<string, unknown>;
+      if (rec['@type'] === 'AggregateRating' || ('ratingValue' in rec && ('reviewCount' in rec || 'ratingCount' in rec))) {
+        const value = Number(rec['ratingValue']);
+        const count = Number(rec['reviewCount'] ?? rec['ratingCount']);
+        if (value > 0 && count > 0) structuredRating = `${value} out of 5 from ${count} review${count === 1 ? '' : 's'}`;
+      }
+      stack.push(...Object.values(rec));
+    }
+    if (structuredRating) break;
+  }
+
+  // Visible page content without the site-wide header, navigation and footer.
+  const productAreaText = (() => {
+    const root = (document.querySelector('main') as HTMLElement | null) ?? document.body;
+    let t = root.innerText ?? '';
+    for (const chrome of Array.from(root.querySelectorAll<HTMLElement>('header, nav, footer'))) {
+      const own = chrome.innerText ?? '';
+      if (own) t = t.replace(own, ' ');
+    }
+    return t;
+  })();
+
   const ecommerce = {
+    structuredRating,
     priceVisible: !!priceNode,
-    priceAboveFold: !!priceRect && priceRect.top < VH && priceRect.bottom > 0,
+    priceAboveFold: priceOnScreen,
     priceText: priceNode ? text(priceNode).slice(0, 60) : null,
-    addToCartText: cartBtn ? (text(cartBtn) || cartBtn.getAttribute('aria-label') || '').slice(0, 60) : null,
-    addToCartAboveFold: !!cartRect && cartRect.top < VH && cartRect.bottom > 0,
-    addToCartWidth: cartRect ? Math.round(cartRect.width) : 0,
-    addToCartHeight: cartRect ? Math.round(cartRect.height) : 0,
+    addToCartText: cartBtn ? buyLabel(cartBtn).slice(0, 60) : stickyBuy ? buyLabel(stickyBuy).slice(0, 60) : null,
+    addToCartAboveFold: (!!cartRect && cartRect.top < VH && cartRect.bottom > 0) || !!stickyBuy,
+    stickyBuyBar: !!stickyBuy,
+    addToCartWidth: Math.round((cartRect ?? stickyBuy?.getBoundingClientRect())?.width ?? 0),
+    addToCartHeight: Math.round((cartRect ?? stickyBuy?.getBoundingClientRect())?.height ?? 0),
     variantGroups,
     stockText: stockMatch ? stockMatch[0] : null,
     galleryImages,
     reviewWidget,
     ratingText: ratingMatch ? ratingMatch[0].slice(0, 40) : null,
-    shippingInfo: /\b(free shipping|free delivery|ships? (in|within|today)|delivery by|dispatch)\b/i.test(allText),
-    returnsInfo: /\b(returns?|refunds?|exchanges?|money[- ]back)\b/i.test(allText),
+    // Both judged on the page content, not the header/footer menus: a footer
+    // "Return Center" link used to count as returns info while a "Shipping &
+    // Returns" section on the product was missed as shipping info.
+    shippingInfo:
+      /\b(free (shipping|delivery)|shipping (&|and) returns?|delivery (&|and) returns?|shipping (info|information|policy|details|times?)|delivery (info|information|details|times?)|estimated delivery|ships? (in|within|today|free)|delivery (by|in|within)|dispatch(es|ed)? (in|within)|arrives? (by|in))\b/i.test(productAreaText) ||
+      // A section headed just "Delivery" or "Shipping" (accordion titles).
+      /^\s*(shipping|delivery)(\s+(info|information|details|options))?\s*$/im.test(productAreaText),
+    // Policy wording only: bare "return" also matched product copy such as
+    // Allbirds' "sugarcane delivers comfort and energy return".
+    returnsInfo:
+      /\b(free returns?|easy returns?|returns? (policy|&|and|within|accepted|are free)|(shipping|delivery) (&|and) returns?|\d+[- ]days? (free )?returns?|return policy|refunds?|money[- ]back|exchanges?)\b/i.test(productAreaText) ||
+      /^\s*returns?( (&|and) (exchanges|refunds))?\s*$/im.test(productAreaText),
     paymentIcons,
     productTiles: productLinks.size,
     tilesWithPrice,
@@ -687,7 +951,7 @@ export function collectFn(): CollectResult {
       hasPrivacyLink: anchorMatch(/privacy/i),
       hasTermsLink: anchorMatch(/terms|conditions/i),
       hasContactLink: anchorMatch(/contact/i),
-      hasAboutLink: anchorMatch(/about/i),
+      hasAboutLink: anchorMatch(/about|our story|our mission|who we are|our brand|mission/i),
       hasPhone: !!document.querySelector('a[href^="tel:"]') || /\+?\d[\d\s().-]{8,}\d/.test(allText),
       hasEmail: !!document.querySelector('a[href^="mailto:"]'),
       hasSocialLinks: anchorMatch(/facebook|instagram|linkedin|twitter|x\.com|youtube|tiktok/i),
@@ -705,13 +969,15 @@ export function collectFn(): CollectResult {
       largestOverlayCoverage: Math.round(largestOverlayCoverage * 100) / 100,
       openDialogs,
       cookieBanner,
+      cookieCoverage: cookieOverlay?.coverage ?? 0,
+      overlays,
       chatWidget: !!chatEl,
       widgetObscuresCta,
     },
     tracking,
     copy: {
       h1,
-      h1Count: document.querySelectorAll('h1').length,
+      h1Count: visibleH1s.length,
       h2Count: document.querySelectorAll('h2').length,
       heroCopy: heroCopy ? heroCopy.slice(0, 300) : null,
       wordCount: allWordCount,
@@ -792,6 +1058,8 @@ export interface CollectResult {
     largestOverlayCoverage: number;
     openDialogs: number;
     cookieBanner: boolean;
+    cookieCoverage: number;
+    overlays: { kind: string; coverage: number; text: string }[];
     chatWidget: boolean;
     widgetObscuresCta: boolean;
   };
@@ -825,6 +1093,8 @@ export interface CollectResult {
     priceText: string | null;
     addToCartText: string | null;
     addToCartAboveFold: boolean;
+    stickyBuyBar: boolean;
+    structuredRating: string | null;
     addToCartWidth: number;
     addToCartHeight: number;
     variantGroups: number;

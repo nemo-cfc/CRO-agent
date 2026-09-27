@@ -32,6 +32,9 @@ export const isServerless = (): boolean =>
  * Vercel the package is absent and a static import would fail the build.
  */
 async function localExecutablePath(): Promise<string | undefined> {
+  // Explicit override, e.g. when the machine's policy blocks Playwright's
+  // full chrome.exe but allows the headless shell or an installed Chrome.
+  if (process.env['CHROME_EXECUTABLE_PATH']) return process.env['CHROME_EXECUTABLE_PATH'];
   try {
     const pw = (await import('playwright')) as unknown as {
       chromium: { executablePath(): string };

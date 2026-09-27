@@ -25,7 +25,10 @@ export const config = {
    * requirement so a slow site degrades into a partial report rather than
    * a timeout the user sees.
    */
-  deadlineMs: int('AUDIT_DEADLINE_MS', 25_000),
+  /** Measurement stops here; whatever was collected is scored. */
+  deadlineMs: int('AUDIT_DEADLINE_MS', 20_000),
+  /** The model write-up must finish by this point (from the start of the audit). */
+  writeDeadlineMs: int('WRITE_DEADLINE_MS', 28_000),
   /** Per-page navigation budget. */
   navTimeoutMs: int('NAV_TIMEOUT_MS', 12_000),
   /** How long to wait for `load` after `domcontentloaded` before moving on. */

@@ -266,14 +266,19 @@ function productChecks(page: PageEvidence | null): Check[] {
       id: 'ecommerce.deliveryTerms',
       category: 'ecommerce',
       title: 'Shipping and returns are answered on the page',
-      status: e.shippingInfo && e.returnsInfo ? 'pass' : e.shippingInfo || e.returnsInfo ? 'warn' : 'fail',
+      // A site-wide shipping banner states the terms, just not at the point
+      // of decision: at most a warning, and never described as "missing".
+      status: e.shippingInfo && e.returnsInfo ? 'pass' : e.shippingInfo || e.returnsInfo || e.shippingBanner ? 'warn' : 'fail',
       weight: 1.5,
       scope: 'product',
       detail:
         e.shippingInfo && e.returnsInfo
           ? 'Both shipping and returns information appear on the product page.'
-          : `Missing ${!e.shippingInfo ? 'shipping/delivery information' : ''}${!e.shippingInfo && !e.returnsInfo ? ' and ' : ''}${!e.returnsInfo ? 'returns information' : ''}. Unanswered delivery and returns questions are among the most common reasons a full cart is abandoned.`,
-      evidence: { shipping: e.shippingInfo, returns: e.returnsInfo },
+          : [
+              !e.shippingInfo && e.shippingBanner ? 'Shipping terms appear only in the site-wide banner, not next to the buy button.' : !e.shippingInfo ? 'No shipping or delivery information on the product page.' : '',
+              !e.returnsInfo ? 'No returns information on the product page.' : '',
+            ].filter(Boolean).join(' '),
+      evidence: { shipping: e.shippingInfo, shippingBanner: !!e.shippingBanner, returns: e.returnsInfo },
     }),
   );
 

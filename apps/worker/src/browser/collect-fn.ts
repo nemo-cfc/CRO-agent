@@ -893,6 +893,12 @@ export function collectFn(): CollectResult {
     returnsInfo:
       /\b(free returns?|easy returns?|returns? (policy|&|and|within|accepted|are free)|(shipping|delivery) (&|and) returns?|\d+[- ]days? (free )?returns?|return policy|refunds?|money[- ]back|exchanges?)\b/i.test(productAreaText) ||
       /^\s*returns?( (&|and) (exchanges|refunds))?\s*$/im.test(productAreaText),
+    // Shipping terms in a site-wide announcement bar or header ("Free U.S.
+    // shipping on orders over $50"). Not the same as answering it at the buy
+    // button, but the store does state it, so the finding must not say
+    // "missing".
+    shippingBanner: Array.from(document.querySelectorAll<HTMLElement>('header, [class*="announcement" i], [class*="promo-bar" i], [class*="top-bar" i], [id*="announcement" i]'))
+      .some((el) => /\b(free\s+(?:[a-z.]+\s+){0,2}(shipping|delivery)|(shipping|delivery)\s+on\s+(all\s+)?orders|ships?\s+free)\b/i.test(el.innerText ?? '')),
     paymentIcons,
     productTiles: productLinks.size,
     tilesWithPrice,
@@ -1103,6 +1109,7 @@ export interface CollectResult {
     reviewWidget: boolean;
     ratingText: string | null;
     shippingInfo: boolean;
+    shippingBanner: boolean;
     returnsInfo: boolean;
     paymentIcons: number;
     productTiles: number;

@@ -316,6 +316,8 @@ export const EcommerceEvidenceSchema = z.object({
   reviewWidget: z.boolean(),
   ratingText: z.string().nullable(),
   shippingInfo: z.boolean(),
+  /** Shipping terms stated site-wide (announcement bar / header), not at the buy button. */
+  shippingBanner: z.boolean().optional(),
   returnsInfo: z.boolean(),
   paymentIcons: z.number().int(),
   /* collection-page signals */

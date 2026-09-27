@@ -1,35 +1,36 @@
+import { targetText } from '@cro/shared';
 import { BOOKING_PATH } from './AdvancedFindings';
 
 const ROWS: { area: string; shows: string; target: string }[] = [
   {
     area: 'Product discovery',
     shows: 'Whether search, collections, and filters help shoppers find the right products—or send them into dead ends, such as sold-out items left at the top of a collection instead of moving to the end',
-    target: '+4–8% relative lift in discovery-to-product-view rate',
+    target: targetText('discovery'),
   },
   {
     area: 'Product pages',
     shows: 'Which unanswered questions or unclear product details may be stopping an add-to-cart decision',
-    target: '+3–7% relative lift in product-view-to-add-to-cart rate',
+    target: targetText('productPages'),
   },
   {
     area: 'Mobile shopping',
     shows: 'Whether popups, variant selection, layout, or hidden buttons make buying harder on a phone',
-    target: '+4–9% relative lift in mobile product-view-to-add-to-cart rate',
+    target: targetText('mobile'),
   },
   {
     area: 'Ad-to-page experience',
     shows: 'Whether the page delivers what the ad promised, or makes visitors search for it',
-    target: '+3–6% relative lift in landing-page-to-product-view rate',
+    target: targetText('adToPage'),
   },
   {
     area: 'Shipping and returns',
     shows: 'Whether delivery costs, timelines, or return terms create uncertainty before checkout',
-    target: '+2–5% relative lift in add-to-cart-to-checkout rate',
+    target: targetText('shipping'),
   },
   {
     area: 'Cart and checkout',
     shows: 'What interrupts shoppers between adding a product and completing an order',
-    target: 'A test target set after we identify the specific friction',
+    target: targetText('cart'),
   },
 ];
 

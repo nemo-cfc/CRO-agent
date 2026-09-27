@@ -50,9 +50,9 @@ const n = (v: unknown) => (typeof v === 'number' ? v : Number(v));
 const secs = (ms: unknown) => `${(n(ms) / 1000).toFixed(1)} seconds`;
 
 const META: Record<string, Meta> = {
-  'friction.blockingOverlay': { cohort: 'interruptions', impact: 5, plain: {
-    found: (c) => `As soon as someone opens your homepage on a phone, a pop-up covers ${Math.round(n(c.evidence.coverage) * 100)}% of the screen before they have seen anything.`,
-    why: 'Visitors decide in seconds whether to stay. Being blocked before they see a single product is one of the most common reasons people leave straight away.',
+  'friction.blockingOverlay': { cohort: 'interruptions', impact: 4, plain: {
+    found: (c) => `As soon as someone opens your homepage on a phone, a pop-up covers ${Math.round(n(c.evidence.coverage) * 100)}% of the screen within seconds of arriving.`,
+    why: 'Visitors decide in seconds whether to stay, and a full-screen interruption at that moment makes some of them leave. Sign-up pop-ups also capture emails, so the aim is better timing, not removing it.',
     fix: 'Show the pop-up later (for example after a scroll or 15–20 seconds), or turn it into a small bar at the top or bottom that does not block the page.' } },
   'friction.cookieBanner': { cohort: 'interruptions', impact: 2, plain: {
     found: (c) => `The cookie notice takes up ${Math.round(n(c.evidence.coverage) * 100)}% of the phone screen.`,
@@ -78,9 +78,9 @@ const META: Record<string, Meta> = {
     found: () => 'On a computer screen there is nothing to click before scrolling.',
     why: 'Visitors who are ready to shop have no obvious next step.',
     fix: 'Put a clear "Shop" button on the first screen.' } },
-  'aboveFold.ctaMobile': { cohort: 'firstImpression', impact: 5, plain: {
+  'aboveFold.ctaMobile': { cohort: 'firstImpression', impact: 4, plain: {
     found: () => 'On a phone there is nothing to tap before scrolling.',
-    why: 'Most visitors arrive on a phone; without a visible next step many leave.',
+    why: 'Phones usually bring most visits; without a visible next step, some of those visitors leave instead of scrolling.',
     fix: 'Put a clear "Shop" button on the first phone screen.' } },
   'cta.competing': { cohort: 'firstImpression', impact: 2, plain: {
     why: 'When several buttons shout equally loudly, visitors hesitate over which to pick.',
@@ -168,7 +168,7 @@ const META: Record<string, Meta> = {
     fix: 'Bring the size choice and buy button onto the first phone screen, or add a buy bar that stays at the bottom of the screen.' } },
   'ecommerce.socialProof': { cohort: 'buyConfidence', impact: 5, plain: {
     found: () => 'The product page shows no star ratings or customer reviews.',
-    why: 'Reviews from other buyers are one of the strongest reasons first-time shoppers trust a store.',
+    why: 'Reviews from other buyers are one of the main things first-time shoppers use to decide whether to trust a store.',
     fix: 'Add a reviews app and show the star rating near the product name.' } },
   'ecommerce.gallery': { cohort: 'buyConfidence', impact: 3, plain: {
     found: (c) => `The product has only ${c.evidence.images} image.`,
@@ -179,7 +179,7 @@ const META: Record<string, Meta> = {
     why: 'Saying "In stock" removes a small doubt at no cost.',
     fix: 'Show availability, for example "In stock – ships in 2 days".' } },
   'ecommerce.deliveryTerms': { cohort: 'buyConfidence', impact: 4, plain: {
-    why: 'Unanswered delivery and returns questions are among the most common reasons people abandon a purchase.',
+    why: 'Shoppers who cannot see delivery costs, timing or return terms at the moment of deciding are more likely to hesitate, or to abandon later when the costs first appear.',
     fix: 'Add short delivery and returns lines next to the buy button, with a link to the full policy.' } },
   'ecommerce.paymentTrust': { cohort: 'buyConfidence', impact: 3, plain: {
     found: () => 'No payment options (cards, PayPal, pay-later) are shown near the buy button.',
@@ -260,95 +260,220 @@ const META: Record<string, Meta> = {
 };
 
 /**
- * The business result of fixing each item, and the number that should move.
- * Deliberately without percentages: the instant audit has no store data to
- * back a figure, so it names the outcome and the metric to watch instead.
+ * Illustrative test targets per investigation area. These are the ranges the
+ * report's "deeper audit" table shows: examples of what a test might aim for,
+ * never a prediction for the audited store. Areas without a range get their
+ * target set during the detailed audit.
  */
-const GAINS: Record<string, string> = {
-  'friction.blockingOverlay': 'More of the visitors you paid to attract stay long enough to see your products, so fewer leave in the first seconds and more go on to view a product. Watch: mobile bounce rate and homepage-to-product-view rate.',
-  'friction.cookieBanner': 'Your offer and products are visible from the first second instead of hidden behind a notice, so more visitors start browsing. Watch: mobile bounce rate.',
-  'friction.chatWidget': 'Every tap on the button reaches the button, so no shopper is lost to an accidental chat window. Watch: clicks on the covered button.',
+export type TargetArea = 'discovery' | 'productPages' | 'mobile' | 'adToPage' | 'shipping' | 'cart';
 
-  'aboveFold.h1Present': 'First-time visitors understand what you sell at a glance, so fewer leave confused and more click through to shop. Watch: homepage bounce rate.',
-  'aboveFold.h1Length': 'Your main message is read instead of skimmed, so more visitors grasp your offer before scrolling. Watch: homepage bounce rate.',
-  'aboveFold.heroCopy': 'Visitors get a reason to care before they scroll away, lifting how many go on to explore your products. Watch: homepage-to-collection clicks.',
-  'aboveFold.ctaDesktop': 'Ready-to-buy desktop visitors get an obvious first step, so more of them start shopping instead of drifting. Watch: homepage click-through rate on desktop.',
-  'aboveFold.ctaMobile': 'Phone visitors, usually most of your traffic, get an obvious first step, so more of them start shopping. Watch: homepage click-through rate on mobile.',
-  'cta.competing': 'A single clear next step removes hesitation, so more visitors take the path that leads to a sale. Watch: clicks on your main button.',
-  'cta.keyPage': 'Visitors who reach this page ready to act can act right away, turning more of that intent into sales. Watch: this page’s click-through rate.',
-
-  'cta.contrast': 'Your main button gets noticed, so more visitors click it and move towards a purchase. Watch: clicks on the main button.',
-  'cta.tapTarget': 'The button is easy to hit on a phone, so fewer shoppers give up after a missed tap. Watch: mobile clicks on the main button.',
-  'cta.copy': 'Visitors know exactly what they get by tapping, so more of them tap. Watch: clicks on the main button.',
-  'mobile.tapTargets': 'Fewer mis-taps and less frustration on phones, so more mobile visitors reach the products they meant to open. Watch: mobile pages per visit.',
-  'mobile.stickyCta': 'The main action stays within reach while shoppers scroll, capturing buyers the moment they decide. Watch: mobile clicks on the main button.',
-  'ecommerce.addToCartSize': 'Your most valuable tap becomes effortless, so fewer ready buyers miss it. Watch: mobile add-to-cart rate.',
-
-  'mobile.textSize': 'Product details and offers actually get read on phones, so fewer questions stand between a shopper and the buy button. Watch: mobile time on page.',
-  'mobile.overflow': 'The site feels solid and trustworthy on phones, so fewer mobile visitors leave thinking it is broken. Watch: mobile bounce rate.',
-  'mobile.viewportMeta': 'The site becomes usable on phones at all, recovering mobile shoppers who currently struggle to read or tap anything. Watch: mobile conversion rate.',
-
-  'speed.lcp': 'Shoppers see your page sooner, so fewer give up while waiting, and every visitor from ads, email or social is worth more. Watch: mobile bounce rate and conversion rate.',
-  'speed.fcp': 'Visitors see something straight away instead of a blank screen, so fewer leave before the page appears. Watch: mobile bounce rate.',
-  'speed.cls': 'Shoppers stop tapping the wrong thing as the page shifts, so browsing feels smooth and fewer abandon in frustration. Watch: mobile pages per visit.',
-  'speed.ttfb': 'Every page on the site starts loading sooner, which speeds up the whole shopping journey. Watch: page load time and bounce rate.',
-  'speed.blocking': 'Taps and scrolls respond instantly, so the store feels quick and shoppers keep going. Watch: mobile pages per visit.',
-  'speed.inp': 'The store reacts the moment people tap, so buying feels effortless. Watch: add-to-cart rate.',
-  'speed.imageDimensions': 'A steady page means fewer mis-taps and a more polished feel, which supports trust. Watch: mobile pages per visit.',
-  'speed.weight': 'Lighter pages load faster on mobile data, keeping more shoppers on the site. Watch: mobile bounce rate.',
-
-  'ecommerce.price': 'Shoppers get their first answer instantly, so fewer leave the product page to look elsewhere. Watch: product-view-to-add-to-cart rate.',
-  'ecommerce.addToCart': 'Ready buyers can act the moment they decide, turning more product views into purchases. Watch: mobile product-view-to-add-to-cart rate.',
-  'ecommerce.socialProof': 'First-time shoppers gain the confidence to buy from a brand they do not know yet, one of the biggest levers on product-page sales. Watch: product-view-to-add-to-cart rate.',
-  'ecommerce.gallery': 'Photos answer questions a shopper cannot ask in person, so more buy with confidence and fewer return. Watch: add-to-cart rate and return rate.',
-  'ecommerce.stock': 'Removes a small doubt at no cost, so hesitant shoppers commit sooner. Watch: add-to-cart rate.',
-  'ecommerce.deliveryTerms': 'Shoppers know the cost, timing and return terms before checkout, so fewer abandon the cart over surprises. Watch: add-to-cart-to-checkout rate.',
-  'ecommerce.paymentTrust': 'Familiar payment options reassure new customers and make larger orders easier to say yes to. Watch: checkout completion rate.',
-  'ecommerce.variantLoad': 'Fewer decisions before the buy button means fewer chances to hesitate. Watch: add-to-cart rate.',
-
-  'ecommerce.tilePrices': 'Shoppers can compare at a glance and open only products they can afford, so more views turn into purchases. Watch: collection-to-product-view rate.',
-  'ecommerce.browseTools': 'Shoppers find the right product in a few taps instead of scrolling through everything, so more of them reach a product they want. Watch: collection-to-product-view rate.',
-  'ecommerce.search': 'Shoppers who already know what they want go straight to it; they are typically your most ready-to-buy visitors. Watch: search usage and its conversion rate.',
-  'ecommerce.cartAccess': 'Shoppers can get back to their bag from anywhere, so fewer carts are forgotten. Watch: cart-to-checkout rate.',
-
-  'ecommerce.cartFeedback': 'Shoppers know instantly that it worked and see the way to checkout, so fewer stall after adding an item. Watch: add-to-cart-to-checkout rate.',
-  'ecommerce.cartContinue': 'Shoppers who want a second item can go back without losing their bag, which raises items per order. Watch: average order value.',
-  'ecommerce.cartCrossSell': 'Matching items shown at the moment of highest intent add to more orders. Watch: average order value.',
-
-  'trust.testimonials': 'New visitors see real customers vouching for you before they reach a product, so more of them trust you enough to buy. Watch: first-time visitor conversion rate.',
-  'trust.logos': 'Recognisable names borrow credibility for your brand, so sceptical first-time visitors are more likely to buy. Watch: first-time visitor conversion rate.',
-  'trust.legal': 'Removes a red flag that makes careful shoppers hesitate at checkout. Watch: checkout completion rate.',
-  'trust.contact': 'Shoppers with a last question can get an answer instead of leaving, and knowing they can reach you builds trust. Watch: conversion rate for first-time visitors.',
-  'trust.presence': 'Shows there is a real business behind the store, which reassures first-time buyers. Watch: first-time visitor conversion rate.',
-
-  'forms.fieldCount': 'A shorter form means more people finish it, so you capture more leads and sign-ups. Watch: form completion rate.',
-  'forms.labels': 'Fewer mistakes and less confusion, so more people complete the form. Watch: form completion rate.',
-  'forms.autocomplete': 'Phone users fill the form in seconds, so more of them finish it. Watch: mobile form completion rate.',
-  'forms.submitCopy': 'People know what they will get, so more of them press the button. Watch: form submissions.',
-  'forms.captcha': 'Real customers stop being turned away by puzzles, so more submissions get through. Watch: form completion rate.',
-
-  'technical.title': 'A clear title in Google results earns more clicks from people already searching for what you sell. Watch: search click-through rate.',
-  'technical.metaDescription': 'A complete, persuasive snippet in Google earns more clicks from searchers. Watch: search click-through rate.',
-  'technical.canonical': 'Google ranks the right page instead of splitting its attention across duplicates. Watch: organic search traffic.',
-  'technical.socialPreview': 'Links shared by customers and on social media stand out with an image, bringing in more free visits. Watch: social referral traffic.',
-  'technical.schema': 'Richer Google results (such as ratings and prices) stand out and earn more clicks. Watch: search click-through rate.',
-  'technical.lang': 'Search engines and browsers handle your pages correctly for your audience. Watch: organic search traffic.',
-
-  'tracking.analytics': 'You can see which pages and channels bring sales, so you spend on what works. Watch: whether each change moves conversion rate.',
-  'tracking.tagManager': 'Your team can add and fix tracking without waiting for a developer, so testing moves faster.',
-  'tracking.adPixel': 'Ad platforms learn who actually buys, so the same ad budget brings in more customers. Watch: return on ad spend.',
-  'tracking.behaviour': 'You see exactly where real shoppers get stuck, so you fix the issues that cost the most sales first.',
+export const TEST_TARGETS: Record<TargetArea, { area: string; range: string | null; metric: string }> = {
+  discovery: { area: 'Product discovery', range: '+4–8%', metric: 'discovery-to-product-view rate' },
+  productPages: { area: 'Product pages', range: '+3–7%', metric: 'product-view-to-add-to-cart rate' },
+  mobile: { area: 'Mobile shopping', range: '+4–9%', metric: 'mobile product-view-to-add-to-cart rate' },
+  adToPage: { area: 'Ad-to-page experience', range: '+3–6%', metric: 'landing-page-to-product-view rate' },
+  shipping: { area: 'Shipping and returns', range: '+2–5%', metric: 'add-to-cart-to-checkout rate' },
+  cart: { area: 'Cart and checkout', range: null, metric: 'add-to-cart-to-order rate' },
 };
 
-function gainFor(check: Check): string {
-  const exact = GAINS[check.id];
-  if (exact) return exact;
-  if (check.id.startsWith('visual.first-view-overlay')) return GAINS['friction.blockingOverlay']!;
-  if (check.id.startsWith('visual.low-contrast')) return 'Your message and offers are actually read, so fewer shoppers miss the details that persuade them to buy. Watch: clicks on the affected section.';
-  if (check.id.startsWith('visual.small-text')) return 'Details shoppers need get read on phones, so fewer questions stand between them and the buy button. Watch: mobile add-to-cart rate.';
-  if (check.id.startsWith('visual.generic-action')) return 'Visitors know what they get by tapping, so more of them tap. Watch: clicks on that button.';
-  if (check.id.startsWith('observed.')) return 'Your numbers become trustworthy again, so decisions about ads and changes are based on real results.';
-  return '';
+/** The table wording for an area's target. */
+export function targetText(area: TargetArea): string {
+  const t = TEST_TARGETS[area];
+  return t.range ? `${t.range} relative lift in ${t.metric}` : 'A test target set after we identify the specific friction';
+}
+
+/** The business result of fixing each item, in a formal, commercial register. */
+const GAINS: Record<string, string> = {
+  'friction.blockingOverlay': 'Should keep more of the visitors who close the page on seeing the pop-up, including traffic you have paid to acquire, while still collecting sign-ups once the pop-up is better timed.',
+  'friction.cookieBanner': 'Returns the most valuable screen space on a phone to your products and offer, so more arriving visitors begin browsing instead of stalling on a notice.',
+  'friction.chatWidget': 'Removes an obstruction from a revenue-critical button, so intent to buy is no longer lost to accidental taps.',
+
+  'aboveFold.h1Present': 'Establishes within seconds what you sell and who it is for, reducing early exits from first-time visitors who cannot place the brand.',
+  'aboveFold.h1Length': 'Ensures the core value proposition is absorbed rather than skimmed, strengthening the first impression that decides whether a visitor stays.',
+  'aboveFold.heroCopy': 'Gives first-time visitors a clear reason to continue, converting more homepage traffic into product exploration.',
+  'aboveFold.ctaDesktop': 'Provides purchase-ready desktop visitors an immediate route into the catalogue, capturing demand that currently drifts away.',
+  'aboveFold.ctaMobile': 'Gives mobile visitors, often the majority of traffic, an obvious route into the catalogue from the first screen.',
+  'cta.competing': 'Concentrates visitor attention on the single action that drives revenue, reducing hesitation and diverted clicks.',
+  'cta.keyPage': 'Converts high-intent visitors at the moment they arrive ready to act, rather than relying on them to search for the next step.',
+
+  'cta.contrast': 'Makes your primary call to action easier to spot, which tends to increase the share of visitors who click it.',
+  'cta.tapTarget': 'Removes physical friction from the primary action on mobile, so fewer purchase journeys fail at the first tap.',
+  'cta.copy': 'States the value of clicking, not just the action, giving more visitors a concrete reason to proceed.',
+  'mobile.tapTargets': 'Eliminates the mis-taps that erode confidence on mobile, keeping more shoppers moving through the catalogue.',
+  'mobile.stickyCta': 'Keeps the path to purchase permanently within reach, capturing buying decisions at the moment they are made.',
+  'ecommerce.addToCartSize': 'Removes friction from the single most valuable interaction in the store, protecting conversions from ready-to-buy mobile shoppers.',
+
+  'mobile.textSize': 'Ensures product information that answers buying questions is actually read on mobile, removing a quiet barrier to purchase.',
+  'mobile.overflow': 'Removes a visible defect that signals an unreliable store on mobile, protecting trust at the point it is formed.',
+  'mobile.viewportMeta': 'Makes the store properly usable on mobile, where visitors currently see a shrunken desktop page.',
+
+  'speed.lcp': 'Should reduce the number of visitors who leave while the page is still loading, which matters most for paid and social traffic arriving on mobile data.',
+  'speed.fcp': 'Shortens the blank-screen period in which some visitors give up before the page appears.',
+  'speed.cls': 'Stabilises the page so shoppers act on what they intend to, reducing frustration and abandoned sessions.',
+  'speed.ttfb': 'Speeds up the start of every page load, so the whole journey from landing to checkout feels quicker.',
+  'speed.blocking': 'Restores immediate response to taps and scrolls during load, preventing early sessions from feeling unresponsive and ending prematurely.',
+  'speed.inp': 'Makes the store respond instantly to shopper actions, removing hesitation from the steps that lead to purchase.',
+  'speed.imageDimensions': 'Prevents layout movement that causes mis-taps and undermines a premium impression.',
+  'speed.weight': 'Reduces load times on mobile networks, retaining visitors who currently leave before the store has finished loading.',
+
+  'ecommerce.price': 'Answers the question most shoppers ask first without effort, reducing exits to check the price elsewhere.',
+  'ecommerce.addToCart': 'Brings the purchase action closer to where the buying decision is made; the effect is usually modest when the button is only just below the fold.',
+  'ecommerce.socialProof': 'Supplies the third-party validation many first-time buyers look for before trusting an unfamiliar brand; for new customers this is often one of the stronger levers on a product page.',
+  'ecommerce.gallery': 'Helps substitute for handling the product in person, which can raise purchase confidence and reduce returns caused by mismatched expectations.',
+  'ecommerce.stock': 'Removes uncertainty about availability at the point of decision, shortening the path to add-to-cart.',
+  'ecommerce.deliveryTerms': 'Answers cost, timing and returns questions before checkout; unexpected delivery costs are a frequently reported reason for abandoning a cart.',
+  'ecommerce.paymentTrust': 'Signals security and flexibility to new customers, reducing hesitation on higher-value orders.',
+  'ecommerce.variantLoad': 'Shortens the decision path to purchase, reducing the points at which a shopper can hesitate or leave.',
+
+  'ecommerce.tilePrices': 'Enables comparison directly from the collection, directing shoppers to products within their budget and increasing qualified product views.',
+  'ecommerce.browseTools': 'Shortens the path from browsing to the right product, preventing shoppers from abandoning a long, unfiltered catalogue.',
+  'ecommerce.search': 'Gives visitors who already know what they want a direct route to it.',
+  'ecommerce.cartAccess': 'Keeps the basket accessible from every page, reducing forgotten carts and lost orders.',
+
+  'ecommerce.cartFeedback': 'Confirms the action and presents the route to checkout immediately, reducing stalled baskets and duplicate attempts.',
+  'ecommerce.cartContinue': 'Allows shoppers to add further items without friction, increasing basket size.',
+  'ecommerce.cartCrossSell': 'Presents complementary products at the moment of highest purchase intent, increasing revenue per order.',
+
+  'trust.testimonials': 'Establishes credibility with new visitors before they reach a product, closing the trust gap that stops first purchases.',
+  'trust.logos': 'Transfers credibility from recognised names to your brand, reducing scepticism among first-time buyers.',
+  'trust.legal': 'Removes a red flag that prompts cautious shoppers to abandon at checkout.',
+  'trust.contact': 'Signals accountability and gives hesitant buyers a route to resolve final questions, rather than leaving.',
+  'trust.presence': 'Demonstrates a legitimate, established business behind the store, reassuring first-time buyers.',
+
+  'forms.fieldCount': 'Reduces the effort required to complete the form, increasing the volume of captured leads and sign-ups.',
+  'forms.labels': 'Reduces input errors and confusion, increasing the share of started forms that are completed.',
+  'forms.autocomplete': 'Cuts completion time on mobile, increasing the share of mobile visitors who submit.',
+  'forms.submitCopy': 'Communicates the value of submitting, increasing the share of visitors who follow through.',
+  'forms.captcha': 'Stops genuine customers from being turned away by verification challenges.',
+
+  'technical.title': 'Improves how your store is presented in search results, capturing more clicks from shoppers already searching for what you sell.',
+  'technical.metaDescription': 'Presents a complete, persuasive summary in search results, increasing qualified organic traffic.',
+  'technical.canonical': 'Consolidates search visibility on the correct pages instead of splitting it across duplicates.',
+  'technical.socialPreview': 'Makes shared links display an image of the store, which tends to attract more clicks and free referral traffic.',
+  'technical.schema': 'Qualifies your pages for richer search listings, such as ratings and prices, that attract more clicks than plain results.',
+  'technical.lang': 'Ensures search engines serve your pages correctly to your target audience.',
+
+  'tracking.analytics': 'Establishes visibility into which pages and channels generate revenue, so budget and effort are directed at what performs.',
+  'tracking.tagManager': 'Allows tracking to be deployed and corrected without development cycles, accelerating testing and measurement.',
+  'tracking.adPixel': 'Allows ad platforms to optimise towards actual buyers, improving the return on existing ad spend.',
+  'tracking.behaviour': 'Reveals exactly where real shoppers encounter friction, so fixes are prioritised by their revenue impact.',
+};
+
+/**
+ * What each fix should move: an investigation area from the table (which
+ * carries its illustrative range) or, where the table has no range, a plain
+ * metric. Areas are chosen by the funnel step the fix acts on.
+ */
+const TARGET_OF: Record<string, TargetArea | string> = {
+  'friction.blockingOverlay': 'adToPage', 'friction.cookieBanner': 'adToPage', 'friction.chatWidget': 'adToPage',
+  'aboveFold.h1Present': 'adToPage', 'aboveFold.h1Length': 'adToPage', 'aboveFold.heroCopy': 'adToPage',
+  'aboveFold.ctaDesktop': 'adToPage', 'aboveFold.ctaMobile': 'adToPage',
+  'cta.competing': 'adToPage', 'cta.contrast': 'adToPage', 'cta.copy': 'adToPage', 'cta.tapTarget': 'adToPage',
+  'cta.keyPage': 'productPages',
+  'mobile.tapTargets': 'adToPage', 'mobile.overflow': 'adToPage',
+  'mobile.stickyCta': 'mobile', 'ecommerce.addToCartSize': 'mobile', 'mobile.textSize': 'mobile', 'mobile.viewportMeta': 'mobile',
+  'speed.lcp': 'adToPage', 'speed.fcp': 'adToPage', 'speed.cls': 'adToPage', 'speed.ttfb': 'adToPage',
+  'speed.blocking': 'adToPage', 'speed.imageDimensions': 'adToPage', 'speed.weight': 'adToPage', 'speed.inp': 'productPages',
+  'ecommerce.addToCart': 'mobile',
+  'ecommerce.price': 'productPages', 'ecommerce.socialProof': 'productPages', 'ecommerce.gallery': 'productPages',
+  'ecommerce.stock': 'productPages', 'ecommerce.variantLoad': 'productPages',
+  'trust.logos': 'productPages', 'trust.contact': 'productPages', 'trust.presence': 'productPages', 'trust.testimonials': 'adToPage',
+  'ecommerce.tilePrices': 'discovery', 'ecommerce.browseTools': 'discovery', 'ecommerce.search': 'discovery',
+  'ecommerce.deliveryTerms': 'shipping',
+  'ecommerce.cartAccess': 'cart', 'ecommerce.cartFeedback': 'cart', 'ecommerce.paymentTrust': 'cart', 'trust.legal': 'cart',
+  'ecommerce.cartContinue': 'average order value', 'ecommerce.cartCrossSell': 'average order value',
+  'forms.fieldCount': 'form completion rate', 'forms.labels': 'form completion rate', 'forms.autocomplete': 'mobile form completion rate',
+  'forms.submitCopy': 'form completion rate', 'forms.captcha': 'form completion rate',
+  'technical.title': 'search-result click-through rate', 'technical.metaDescription': 'search-result click-through rate',
+  'technical.schema': 'search-result click-through rate', 'technical.canonical': 'organic search visits',
+  'technical.lang': 'organic search visits', 'technical.socialPreview': 'clicks on shared links',
+  'tracking.adPixel': 'return on ad spend',
+};
+
+/**
+ * How a fix carries through to checkout. Funnel steps before the cart are
+ * described by what they feed into checkout; cart and checkout fixes by
+ * their direct effect. Written per area, with overrides where a fix acts on
+ * checkout in its own way.
+ */
+const CHECKOUT_BY_AREA: Record<TargetArea, string> = {
+  adToPage: 'Indirect: if more sessions get past the landing page and later steps convert as they do today, more shoppers reach checkout. The effect on orders is smaller than the effect on the page itself.',
+  discovery: 'Indirect: easier browsing should lead more sessions to a product and some of those to a cart; the effect on checkouts is diluted by every later step.',
+  productPages: 'Closer to checkout: additional add-to-carts feed checkout, though at your existing cart-to-checkout rate, so only a share of them become orders.',
+  mobile: 'Closer to checkout: mobile usually carries most visits but converts below desktop, so small gains in mobile add-to-carts can add a meaningful number of checkouts.',
+  shipping: 'Direct: acts on the step just before payment, where some shoppers drop out when delivery costs or return terms first appear.',
+  cart: 'Direct: acts inside the path to checkout, so any shopper it keeps is close to an order.',
+};
+
+const CHECKOUT_OVERRIDES: Record<string, string> = {
+  'friction.blockingOverlay': 'Indirect: visitors who would have left at the pop-up can enter the funnel and convert at your usual rate; net of the emails the pop-up would have captured, the gain in orders is modest but real.',
+  'ecommerce.cartFeedback': 'Shoppers who are shown the bag and a checkout button straight after adding an item move to checkout without searching for it, reducing baskets that stall after the first add.',
+  'ecommerce.cartAccess': 'A basket that is always one tap away turns more returning and hesitant shoppers into started checkouts instead of forgotten carts.',
+  'ecommerce.paymentTrust': 'Showing accepted and pay-later options before checkout removes a common reason to abandon at the payment step, lifting completed orders from checkouts already started.',
+  'trust.legal': 'Visible policies remove a last-minute doubt at checkout, lifting the share of started checkouts that become completed orders.',
+  'ecommerce.cartContinue': 'Raises the value of each checkout rather than the number of checkouts: shoppers add further items before paying.',
+  'ecommerce.cartCrossSell': 'Raises the value of each checkout rather than the number of checkouts: complementary items join the order before payment.',
+  'ecommerce.addToCart': 'Closer to checkout: a buy button in view at the moment of decision can turn slightly more mobile product views into carts, which then flow to checkout at your usual rate.',
+  'ecommerce.search': 'Indirect: visitors who search often know what they want and tend to convert well, so a working search can add checkouts from a small but valuable group.',
+  'forms.fieldCount': 'Indirect: contacts captured can be brought back to checkout through email and SMS follow-up.',
+  'forms.labels': 'Indirect: more completed sign-ups mean more shoppers you can bring back to checkout later.',
+  'forms.autocomplete': 'Indirect: more completed mobile sign-ups mean more shoppers you can bring back to checkout later.',
+  'forms.submitCopy': 'Indirect: more completed sign-ups mean more shoppers you can bring back to checkout later.',
+  'forms.captcha': 'Indirect: genuine customers who get through can be brought back to checkout later.',
+  'technical.title': 'Indirect: more qualified shoppers enter at the top of the funnel, each one a potential checkout at no media cost.',
+  'technical.metaDescription': 'Indirect: more qualified shoppers enter at the top of the funnel, each one a potential checkout at no media cost.',
+  'technical.schema': 'Indirect: more qualified shoppers enter at the top of the funnel, each one a potential checkout at no media cost.',
+  'technical.canonical': 'Indirect: stronger search visibility brings more free traffic into the funnel that leads to checkout.',
+  'technical.lang': 'Indirect: stronger search visibility brings more free traffic into the funnel that leads to checkout.',
+  'technical.socialPreview': 'Indirect: more clicks on shared links bring more free traffic into the funnel that leads to checkout.',
+  'tracking.analytics': 'Makes checkout drop-off visible step by step, so the steps losing the most orders are fixed first.',
+  'tracking.tagManager': 'Lets checkout tracking be added or corrected quickly, so changes to the checkout path can be measured.',
+  'tracking.adPixel': 'Ad platforms optimise for completed checkouts rather than clicks, shifting budget towards audiences that actually buy.',
+  'tracking.behaviour': 'Session recordings show exactly where shoppers hesitate or give up in the cart and checkout, pointing to the fixes that recover the most orders.',
+};
+
+export interface BusinessImpact {
+  /** The business result of the fix. */
+  statement: string;
+  /** How the fix carries through to checkout. */
+  checkout: string;
+  /** Illustrative range from the deeper-audit table, when the area has one. */
+  range: string | null;
+  /** The metric the fix should move. */
+  metric: string | null;
+  /** Table area the target comes from. */
+  area: string | null;
+  /** A smaller item that feeds the area metric but is not expected to reach the range alone. */
+  contributes?: boolean;
+}
+
+function lookup(check: Check): { statement: string; target?: TargetArea | string } {
+  const id = check.id;
+  if (GAINS[id]) return { statement: GAINS[id]!, target: TARGET_OF[id] };
+  if (id.startsWith('visual.first-view-overlay')) return { statement: GAINS['friction.blockingOverlay']!, target: 'adToPage' };
+  if (id.startsWith('visual.low-contrast')) return { statement: 'Ensures your offers and messaging are read rather than overlooked, so the content written to persuade actually does its job.', target: sectionOf(check) === 'product' ? 'productPages' : sectionOf(check) === 'collection' ? 'discovery' : 'adToPage' };
+  if (id.startsWith('visual.small-text')) return { statement: 'Ensures the information that answers buying questions is legible on mobile, removing a quiet barrier to purchase.', target: 'mobile' };
+  if (id.startsWith('visual.generic-action')) return { statement: GAINS['cta.copy']!, target: 'adToPage' };
+  if (id.startsWith('observed.')) return { statement: 'Restores the accuracy of your reporting, so budget and optimisation decisions rest on real results.' };
+  return { statement: '' };
+}
+
+/** The business impact of fixing a flagged check, tied to the test target it serves. */
+export function businessImpact(check: Check): BusinessImpact {
+  const { statement, target } = lookup(check);
+  const isArea = !!target && target in TEST_TARGETS;
+  const checkout = CHECKOUT_OVERRIDES[check.id]
+    ?? (isArea ? CHECKOUT_BY_AREA[target as TargetArea] : check.id.startsWith('observed.') ? CHECKOUT_OVERRIDES['tracking.analytics']! : '');
+  if (!target) return { statement, checkout, range: null, metric: null, area: null };
+  if (isArea) {
+    const t = TEST_TARGETS[target as TargetArea];
+    // The table's ranges describe what a round of tests across a whole area
+    // might aim for. Only a major, clearly failed item can plausibly move the
+    // area metric on its own; smaller items contribute to it without a number.
+    const major = impactOf(check) >= 4 && check.status === 'fail';
+    return { statement, checkout, range: major ? t.range : null, metric: t.metric, area: t.area, contributes: !major && t.range !== null };
+  }
+  return { statement, checkout, range: null, metric: target, area: null };
 }
 
 function metaFor(check: Check): Meta {
@@ -391,10 +516,23 @@ export function cohortOf(check: Check): Cohort {
   return metaFor(check).cohort;
 }
 
+/**
+ * How much this kind of problem typically matters, adjusted for what was
+ * actually found: a buy button or price that exists but sits below the fold
+ * on a phone is common and far less costly than one that is missing, and a
+ * shipping line only in the site banner is less costly than none at all.
+ */
+function impactOf(check: Check): number {
+  const base = metaFor(check).impact;
+  if ((check.id === 'ecommerce.addToCart' && check.evidence.text) || (check.id === 'ecommerce.price' && check.evidence.priceText)) return 3;
+  if (check.id === 'ecommerce.deliveryTerms' && check.status === 'warn') return 3;
+  return base;
+}
+
 /** Relative 0–100 estimate of how much fixing this could help; higher = bigger opportunity. */
 export function opportunityScore(check: Check): number {
   if (check.status !== 'fail' && check.status !== 'warn') return 0;
-  const base = [0, 30, 45, 60, 75, 88][metaFor(check).impact]!;
+  const base = [0, 30, 45, 60, 75, 88][impactOf(check)]!;
   const severity = check.status === 'fail' ? 8 : 0;
   const page = sectionOf(check) === 'product' ? 4 : sectionOf(check) === 'collection' ? 2 : 0;
   return Math.min(98, base + severity + page);
@@ -415,12 +553,12 @@ export function opportunityLevel(score: number): 'High' | 'Moderate' | 'Low' {
 }
 
 /** Plain-language wording for a flagged check. */
-export function plainLanguage(check: Check): { found: string; why: string; gain: string; fix: string } {
+export function plainLanguage(check: Check): { found: string; why: string; impact: BusinessImpact; fix: string } {
   const { plain } = metaFor(check);
   return {
     found: plain.found ? plain.found(check) : check.detail,
     why: plain.why,
-    gain: gainFor(check),
+    impact: businessImpact(check),
     fix: plain.fix,
   };
 }

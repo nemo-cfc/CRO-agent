@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   cohortOf, combinedOpportunity, opportunityScore,
-  plainLanguage, sectionOf, type Check,
+  plainLanguage, sectionOf, TEST_TARGETS, type Check,
 } from '@cro/shared';
 import { runRules } from '../index.js';
 import { healthyStoreEvidence } from './fixtures.js';
@@ -15,6 +15,17 @@ describe('opportunity scoring', () => {
     expect(opportunityScore(make('friction.blockingOverlay', 'fail'))).toBeGreaterThan(opportunityScore(make('technical.title', 'warn')));
     expect(opportunityScore(make('speed.lcp', 'fail'))).toBeGreaterThan(opportunityScore(make('speed.lcp', 'warn')));
     expect(opportunityScore(make('speed.lcp', 'pass'))).toBe(0);
+  });
+
+  it('does not oversell: below-the-fold scores below missing, and only major failures carry a range', () => {
+    const belowFold = make('ecommerce.addToCart', 'warn', 'product', { text: 'Add to cart' });
+    const missing = make('ecommerce.addToCart', 'fail', 'product', {});
+    expect(opportunityScore(belowFold)).toBeLessThan(70);
+    expect(opportunityScore(missing)).toBeGreaterThan(opportunityScore(belowFold));
+    expect(plainLanguage(belowFold).impact.range).toBeNull();
+    expect(plainLanguage(belowFold).impact.contributes).toBe(true);
+    expect(plainLanguage(make('ecommerce.stock', 'warn', 'product')).impact.range).toBeNull();
+    expect(plainLanguage(make('friction.blockingOverlay', 'fail', 'home', { coverage: 0.9 })).impact.range).toBe('+3–6%');
   });
 
   it('places findings on the right page and in a cohort', () => {
@@ -38,8 +49,11 @@ describe('opportunity scoring', () => {
       const p = plainLanguage(c);
       expect(p.found.length, c.id).toBeGreaterThan(0);
       expect(p.fix.length, c.id).toBeGreaterThan(0);
-      expect(p.gain.length, `${c.id} needs a business-impact statement`).toBeGreaterThan(0);
-      expect(p.gain, c.id).not.toMatch(/\d+\s*%/);
+      expect(p.impact.statement.length, `${c.id} needs a business-impact statement`).toBeGreaterThan(0);
+      expect(p.impact.checkout.length, `${c.id} needs a checkout-impact statement`).toBeGreaterThan(0);
+      expect(p.impact.statement, c.id).not.toMatch(/\d+\s*%/);
+      // Any number shown must be one of the illustrative ranges from the deeper-audit table.
+      if (p.impact.range) expect(Object.values(TEST_TARGETS).map((t) => t.range), c.id).toContain(p.impact.range);
     }
   });
 });

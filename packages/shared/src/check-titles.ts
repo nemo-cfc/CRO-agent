@@ -24,7 +24,9 @@ const ISSUE_TITLES: Record<string, string | ((c: Check) => string)> = {
   'ecommerce.gallery': 'The product has too few images',
   'ecommerce.stock': 'Availability is not stated',
   'ecommerce.deliveryTerms': (c) =>
-    !c.evidence.shipping && !c.evidence.returns
+    !c.evidence.shipping && c.evidence.shippingBanner
+      ? (c.evidence.returns ? 'Shipping terms are not shown at the buy button' : 'Shipping and returns terms are not shown at the buy button')
+      : !c.evidence.shipping && !c.evidence.returns
       ? 'Shipping and returns information is missing'
       : !c.evidence.returns
         ? 'Returns information is missing'

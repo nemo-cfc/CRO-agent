@@ -3,7 +3,7 @@ import type { Check } from '@cro/shared';
 import {
   COHORT_LABELS, ROLE_LABELS, SECTION_LABELS,
   cohortOf, combinedOpportunity, displayTitle, opportunityLevel,
-  opportunityScore, plainLanguage, sectionOf, type Cohort, type PageSection,
+  opportunityScore, plainLanguage, sectionOf, type BusinessImpact, type Cohort, type PageSection,
 } from '@cro/shared';
 import type { ReportState } from '@/lib/report-state';
 import { CheckShot } from './CheckShot';
@@ -44,13 +44,36 @@ function ScoreBadge({ score, highlight }: { score: number; highlight?: boolean }
   );
 }
 
-function GainBlock({ gain }: { gain: string }) {
-  const [outcome, metric] = gain.split(/\s*Watch:\s*/);
+function ImpactBlock({ impact }: { impact: BusinessImpact }) {
+  const metric = impact.metric ? impact.metric.charAt(0).toUpperCase() + impact.metric.slice(1) : null;
   return (
-    <div className="rp-op-gain">
-      <strong>What you gain by fixing it</strong>
-      <p>{outcome}</p>
-      {metric && <p className="rp-op-metric"><span>Number to watch</span>{metric.charAt(0).toUpperCase() + metric.slice(1).replace(/\.$/, '')}</p>}
+    <div className="rp-impact">
+      <p className="rp-impact-label">Business impact</p>
+      <ul className="rp-impact-points">
+        <li><strong>What changes</strong>{impact.statement}</li>
+        {impact.checkout && <li><strong>Checkout impact</strong>{impact.checkout}</li>}
+      </ul>
+      {impact.range ? (
+        <div className="rp-impact-target">
+          <strong>{impact.range}</strong>
+          <span>
+            relative lift in {impact.metric}
+            <small>Illustrative test target · {impact.area}</small>
+          </span>
+        </div>
+      ) : impact.contributes ? (
+        <div className="rp-impact-target is-plain">
+          <span>{metric}<small>Contributes to the {impact.area} target; not expected to reach it on its own</small></span>
+        </div>
+      ) : impact.area ? (
+        <div className="rp-impact-target is-plain">
+          <span>{metric}<small>Test target set in your detailed audit · {impact.area}</small></span>
+        </div>
+      ) : metric ? (
+        <div className="rp-impact-target is-plain">
+          <span>{metric}<small>Metric this fix should improve</small></span>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -66,7 +89,7 @@ function OpportunityCard({ item, shots, repeatShot }: { item: Item; shots: Repor
       </div>
       <p className="rp-op-found">{text.found}</p>
       {text.why && <p className="rp-op-why"><strong>Why it matters</strong>{text.why}</p>}
-      {text.gain && <GainBlock gain={text.gain} />}
+      {text.impact.statement && <ImpactBlock impact={text.impact} />}
       {text.fix && (
         locked ? (
           <div className="rp-op-fix rp-fix-locked">
@@ -200,7 +223,7 @@ export default function AuditReport({ state, createdAt, partial }: { state: Repo
 
         <section className="rp-section rp-method">
           <h2>How this report works</h2>
-          <p>We visited your {state.targets.length === 1 ? 'page' : 'homepage, a collection page and a product page'} with an automated browser on a phone-sized and a computer screen, and on the product page we added one item to the bag to see what a shopper gets back (no order is placed, and your analytics are not affected). Only things worth improving are listed. Each has an opportunity score from 0 to 100: an estimate of how much fixing it could help compared with the other items, not a sales forecast.</p>
+          <p>We visited your {state.targets.length === 1 ? 'page' : 'homepage, a collection page and a product page'} with an automated browser on a phone-sized and a computer screen, and on the product page we added one item to the bag to see what a shopper gets back (no order is placed, and your analytics are not affected). Only things worth improving are listed. Each has an opportunity score from 0 to 100: an estimate of how much fixing it could help compared with the other items, not a sales forecast. The test targets under each business impact are illustrative ranges we commonly test for in that area, not predicted or guaranteed results for your store.</p>
         </section>
       </main>
     </div>

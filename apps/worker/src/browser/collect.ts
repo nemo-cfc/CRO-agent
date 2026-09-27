@@ -49,7 +49,7 @@ const EMPTY: CollectResult = {
     addToCartWidth: 0, addToCartHeight: 0,
     variantGroups: 0, stockText: null, galleryImages: 0,
     reviewWidget: false, ratingText: null,
-    shippingInfo: false, returnsInfo: false, paymentIcons: 0,
+    shippingInfo: false, shippingBanner: false, returnsInfo: false, paymentIcons: 0,
     productTiles: 0, tilesWithPrice: 0, hasFilters: false, hasSort: false,
     cartLink: false, searchBox: false,
   },

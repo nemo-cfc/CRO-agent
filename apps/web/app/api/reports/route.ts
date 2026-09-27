@@ -16,7 +16,7 @@ export async function POST(request:Request){
  const limit=checkAuditLimit(clientIp(request),url);
  if(!limit.allowed)return Response.json({error:limit.reason==='duplicate'?'This store was audited recently. Please try again later.':'You have reached the audit limit. Please try again later.'},{status:429,headers:{'Retry-After':String(limit.retryAfter),'Cache-Control':'no-store'}});
  const report:StoredReport={id:randomUUID(),createdAt:new Date().toISOString(),status:'running',partial:false,state:{...EMPTY,status:'running',url}};
- try{await saveReport(report);}catch{return Response.json({error:'We could not prepare your report. Please try again.'},{status:500});}
+ try{await saveReport(report);}catch(error){console.error('[reports] could not save a new report:',error);return Response.json({error:'We could not prepare your report. Please try again.'},{status:500});}
  after(async()=>{
   let finished=false;
   try{

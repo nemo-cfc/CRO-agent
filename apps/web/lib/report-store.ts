@@ -22,6 +22,9 @@ export async function saveReport(report: StoredReport) {
     await put(report.id + '.json', JSON.stringify(report), { access: 'private', addRandomSuffix: false, allowOverwrite: true });
     return;
   }
+  // Vercel functions have a read-only filesystem: without Blob storage there
+  // is nowhere to keep a report, so say so instead of failing with EROFS.
+  if (process.env.VERCEL) throw new Error('BLOB_READ_WRITE_TOKEN is not set: connect a Vercel Blob store to this project so reports can be saved.');
   await mkdir(directory(), { recursive: true });
   const file = path.join(directory(), report.id + '.json');
   const temp = file + '.' + randomUUID() + '.tmp';

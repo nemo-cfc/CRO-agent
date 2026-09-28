@@ -1,9 +1,8 @@
 'use client';
 
-import { FormEvent, useEffect, useState } from 'react';
+import { AuditStartForm } from './components/AuditStartForm';
 import './landing.css';
-
-type Job = { id: string; status: 'running' | 'done' | 'error'; reportUrl?: string | null; error?: string };
+import './audit-start.css';
 
 function Icon({ name }: { name: 'arrow' | 'spark' | 'flow' | 'shield' | 'chart' | 'play' }) {
   const paths: Record<string, React.ReactNode> = {
@@ -18,53 +17,32 @@ function Icon({ name }: { name: 'arrow' | 'spark' | 'flow' | 'shield' | 'chart' 
 }
 
 export default function Home() {
-  const [url, setUrl] = useState('');
-  const [job, setJob] = useState<Job | null>(null);
-  const [error, setError] = useState('');
-
-  useEffect(() => {
-    if (!job || job.status !== 'running') return;
-    const timer = window.setInterval(async () => {
-      const res = await fetch(`/api/reports/${job.id}`, { cache: 'no-store' });
-      if (!res.ok) return;
-      const next = (await res.json()) as Job;
-      setJob(next);
-      if (next.status === 'done' || next.status === 'error') window.clearInterval(timer);
-    }, 1500);
-    return () => window.clearInterval(timer);
-  }, [job]);
-
-  async function submit(event: FormEvent) {
-    event.preventDefault();
-    if (!url.trim() || job?.status === 'running') return;
-    setError('');
-    setJob(null);
-    try {
-      const res = await fetch('/api/reports', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ url: url.trim() }) });
-      const body = (await res.json()) as { id?: string; error?: string };
-      if (!res.ok || !body.id) throw new Error(body.error || 'We could not start the audit.');
-      setJob({ id: body.id, status: 'running' });
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Check your store URL.');
-    }
-  }
-
-  const done = job?.status === 'done';
-  const running = job?.status === 'running';
   return (
-    <main className="landing landing-compact">
+    <main className="landing landing-compact lp-v2">
       <nav className="lp-nav"><div className="lp-wrap"><a className="lp-brand" href="https://monkeyman.agency/"><img src="/monkeyman-mark.svg" alt="Monkeyman" /><span className="lp-logo">monkey<span>man</span></span></a><span className="lp-nav-trust">Conversion systems for stores with real visitors</span></div></nav>
       <div className="lp-wrap">
         <section className="lp-hero" id="audit">
+          <div className="as-orb a" aria-hidden="true" /><div className="as-orb b" aria-hidden="true" /><div className="as-grid-bg" aria-hidden="true" />
           <div className="lp-hero-copy">
-            <div className="lp-eyebrow"><span className="lp-eyebrow-dot" /> FREE · INSTANT LIVE CRO AUDIT</div>
-            <h1>Your store gets visitors.<br /><em>Why don’t more of them buy?</em></h1>
-            <p className="lp-lede">See where shoppers hesitate between the first click, the product page, the cart, and checkout. Get a <strong>FREE</strong> evidence-led CRO audit that starts <strong>INSTANTLY</strong> and runs <strong>LIVE</strong>.</p>
-            <div className="lp-offer-badges"><div className="lp-free-badge"><span className="lp-free-star"><Icon name="spark" /></span><div><strong>100% FREE</strong><span>No card. No sales sequence.</span></div></div><div className="lp-live-badge"><span className="lp-live-dot"><i /></span><div><strong>INSTANT LIVE</strong><span>Watch the evidence arrive.</span></div></div></div>
-            <div className="lp-hero-points"><span><Icon name="shield" /> No call required</span><span><Icon name="chart" /> Specific, measured findings</span><span><Icon name="flow" /> Built for action</span></div>
+            <span className="as-eyebrow">Free · instant · live CRO audit</span>
+            <h1><span className="line"><span>Your store gets visitors.</span></span><span className="line"><span><em>Why don’t more of them buy?</em></span></span></h1>
+            <p className="lp-lede">Tell us your store and your <strong>best-selling product</strong>. We audit it the way a shopper would, along with the collection it sits in and your homepage, and show you <strong>where buyers hesitate</strong>, ranked by how much each fix could help.</p>
+            <div className="as-chips" aria-label="What you get">
+              <span className="as-chip"><Icon name="spark" /><strong>100% free</strong> no card</span>
+              <span className="as-chip"><Icon name="play" /><strong>Live</strong> watch it run</span>
+              <span className="as-chip"><Icon name="shield" /><strong>No login</strong> public pages only</span>
+            </div>
+            <ol className="as-steps">
+              <li><span className="n">1</span><span><b>Enter your store and pick your best-seller</b> by name. No links to copy.</span></li>
+              <li><span className="n">2</span><span><b>We follow the shopper’s path</b> from homepage to collection to product and cart.</span></li>
+              <li><span className="n">3</span><span><b>Get a ranked list of fixes</b> with screenshots of what we found.</span></li>
+            </ol>
           </div>
-          <aside className="lp-formcard lp-formcard-hero">
-            {done && job?.reportUrl ? <div className="lp-report-ready"><div className="lp-report-mark" aria-hidden="true">OK</div><div className="lp-eyebrow">Your diagnostic is ready</div><h2>The useful bit<br />is waiting.</h2><p className="lp-formmeta">We found the signals. Open the evidence, priorities, and next moves in full.</p><a className="lp-button lp-button-large" href={job.reportUrl} target="_blank" rel="noreferrer">Get my audit report <Icon name="arrow" /></a><p className="lp-footnote"><span className="lp-lock" /> Opens in a new tab · available for 7 days</p></div> : <><div className="lp-formcard-top"><div className="lp-eyebrow">Start with the URL</div><span className="lp-secure"><i /> Private</span></div><h2>Get your<br />FREE CRO audit.</h2><p className="lp-formmeta">We inspect the pages and moments closest to purchase. You get the audit before we ask for anything else.</p><form onSubmit={submit}><label htmlFor="store-url">Website or store URL</label><input id="store-url" type="url" value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://yourstore.com" autoComplete="url" required /><p className="lp-hint">Public URL only. No login or code access needed.</p><button className="lp-button lp-button-large" type="submit" disabled={running}>{running ? 'Audit running live...' : <>Get my FREE audit <Icon name="arrow" /></>}</button></form>{error && <p className="lp-error" role="alert">{error}</p>}{running && <div className="lp-monkey-loader" role="status" aria-live="polite"><div className="lp-swing-scene"><div className="lp-tree"><span className="lp-canopy lp-canopy-a" /><span className="lp-canopy lp-canopy-b" /><span className="lp-trunk" /></div><div className="lp-vine" /><svg className="lp-swinging-monkey" viewBox="0 0 90 100" aria-hidden="true"><g><circle cx="45" cy="25" r="13" /><circle cx="40" cy="23" r="2" /><circle cx="50" cy="23" r="2" /><path d="M38 31 Q45 37 52 31" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" /><path d="M34 43 Q45 37 56 43 L60 69 Q45 78 30 69 Z" /><path d="M34 47 Q16 52 20 70" fill="none" stroke="currentColor" strokeWidth="7" strokeLinecap="round" /><path d="M56 47 Q74 52 70 70" fill="none" stroke="currentColor" strokeWidth="7" strokeLinecap="round" /><path d="M36 68 Q28 84 22 91 M54 68 Q62 84 68 91" fill="none" stroke="currentColor" strokeWidth="7" strokeLinecap="round" /></g></svg><span className="lp-vine-grip" /></div><div><strong>Live CRO audit in progress</strong><p>Reading the moments where a visitor decides to continue, hesitate, or leave. Keep this tab open.</p></div></div>}<p className="lp-footnote"><span className="lp-lock" /> GDPR respectful. Contact details come after the diagnostic.</p></>}</aside>
+          <div className="as-form-col">
+            <div className="as-toast t1" aria-hidden="true"><i>!</i>Friction found: product page</div>
+            <div className="as-toast t2" aria-hidden="true"><i>✓</i>Fix #1 ranked · High opportunity</div>
+            <AuditStartForm />
+          </div>
         </section>
 
         <section className="lp-section lp-intent-section"><div className="lp-kicker">Start with the problem you recognise</div><h2 className="lp-sectiontitle">One audit. Five ways<br /><em>to find the leak.</em></h2><p className="lp-sectionlead">The FREE audit is the first step. If you already know where the pain sits, choose the part of the shopping journey you want to inspect first.</p><div className="lp-grid three lp-intent-grid"><a className="lp-intent-card" href="#audit"><span className="lp-tile-icon"><Icon name="chart" /></span><strong>Product pages lose shoppers</strong><p>Find the details making shoppers pause.</p><span className="lp-intent-link">Audit my product journey <Icon name="arrow" /></span></a><a className="lp-intent-card" href="#audit"><span className="lp-tile-icon"><Icon name="flow" /></span><strong>Checkout feels uncertain</strong><p>Find the doubt before payment.</p><span className="lp-intent-link">Audit my checkout <Icon name="arrow" /></span></a><a className="lp-intent-card" href="#audit"><span className="lp-tile-icon"><Icon name="spark" /></span><strong>Mobile visitors hesitate</strong><p>Find the mobile moments costing orders.</p><span className="lp-intent-link">Audit my mobile store <Icon name="arrow" /></span></a></div></section>

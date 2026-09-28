@@ -83,3 +83,4 @@
 .landing-compact .lp-video-placeholder{background:radial-gradient(circle at 50% 30%,#4a3324,#241a16 70%);color:#e9c59c}
 .landing-compact .lp-repeat{background:#1d1917;border:1px solid #433930;border-radius:18px;box-shadow:none}
 @media(max-width:900px){.landing-compact .lp-hero{gap:36px}.landing-compact .lp-formcard{box-shadow:0 20px 60px -24px #000}}
+.lp-monkey-illustration{display:block;width:100%;height:100%}.lp-monkey-loader .lp-swing-scene{height:130px}.lp-monkey-playful{transform-origin:100px 24px;animation:lp-playful-swing 2.8s ease-in-out infinite}@keyframes lp-playful-swing{0%,100%{transform:rotate(-7deg)}50%{transform:rotate(7deg)}}@media(prefers-reduced-motion:reduce){.lp-monkey-playful{animation:none}}

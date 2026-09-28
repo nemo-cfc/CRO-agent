@@ -284,7 +284,29 @@ export function AuditStartForm() {
 
       {running && (
         <div className="lp-monkey-loader" role="status" aria-live="polite">
-          <div className="lp-swing-scene"><div className="lp-tree"><span className="lp-canopy lp-canopy-a" /><span className="lp-canopy lp-canopy-b" /><span className="lp-trunk" /></div><div className="lp-vine" /><svg className="lp-swinging-monkey" viewBox="0 0 90 100" aria-hidden="true"><g><circle cx="45" cy="25" r="13" /><circle cx="40" cy="23" r="2" /><circle cx="50" cy="23" r="2" /><path d="M38 31 Q45 37 52 31" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" /><path d="M34 43 Q45 37 56 43 L60 69 Q45 78 30 69 Z" /><path d="M34 47 Q16 52 20 70" fill="none" stroke="currentColor" strokeWidth="7" strokeLinecap="round" /><path d="M56 47 Q74 52 70 70" fill="none" stroke="currentColor" strokeWidth="7" strokeLinecap="round" /><path d="M36 68 Q28 84 22 91 M54 68 Q62 84 68 91" fill="none" stroke="currentColor" strokeWidth="7" strokeLinecap="round" /></g></svg><span className="lp-vine-grip" /></div>
+          <div className="lp-swing-scene" aria-hidden="true">
+            <svg className="lp-monkey-illustration" viewBox="0 0 180 130" fill="none">
+              <circle cx="23" cy="20" r="30" fill="#365f43" />
+              <circle cx="53" cy="9" r="28" fill="#4f8055" />
+              <path d="M20 136 Q28 82 23 34 M25 31 Q78 20 150 26" stroke="#996641" strokeWidth="12" strokeLinecap="round" />
+              <path d="M139 25 Q146 8 160 13 Q159 26 139 25" fill="#8cb977" />
+              <g className="lp-monkey-playful">
+                <path d="M114 83 C148 103 154 64 136 66 C124 67 132 80 139 74" stroke="#c78952" strokeWidth="7" strokeLinecap="round" />
+                <path d="M91 67 Q77 47 92 25 M111 67 Q123 45 108 25" stroke="#c78952" strokeWidth="8" strokeLinecap="round" />
+                <ellipse cx="101" cy="79" rx="18" ry="22" fill="#bd7c48" />
+                <ellipse cx="101" cy="81" rx="11" ry="15" fill="#efc68e" />
+                <path d="M91 96 Q76 102 81 113 M111 96 Q123 101 127 109" stroke="#c78952" strokeWidth="9" strokeLinecap="round" />
+                <circle cx="82" cy="54" r="8" fill="#c78952" />
+                <circle cx="120" cy="54" r="8" fill="#c78952" />
+                <circle cx="101" cy="54" r="21" fill="#bd7c48" />
+                <path d="M85 53 C85 40 97 41 101 47 C105 41 117 40 117 53 L117 60 Q101 79 85 60 Z" fill="#f2ce9b" />
+                <circle cx="94" cy="53" r="2.5" fill="#30251f" />
+                <circle cx="108" cy="53" r="2.5" fill="#30251f" />
+                <path d="M95 63 Q101 69 108 62" stroke="#633f2a" strokeWidth="2.5" strokeLinecap="round" />
+                <path d="M89 25 Q92 18 96 24 M104 24 Q108 18 112 25" stroke="#efc68e" strokeWidth="6" strokeLinecap="round" />
+              </g>
+            </svg>
+          </div>
           <div><strong>Live CRO audit in progress</strong><p>Reading {picked ? picked.title : store ? displayHost(store) : 'your store'} the way a shopper would. Keep this tab open.</p></div>
         </div>
       )}

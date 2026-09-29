@@ -169,9 +169,9 @@ export default function AuditReport({ state, createdAt, partial }: { state: Repo
             </ul>
           </div>
           <div className="rp-hero-score">
-            <OpportunityRing score={overall} />
-            <p className={`rp-verdict opp-${levelTone(overall)}`}>{opportunityLevel(overall)} opportunity</p>
-            <p className="rp-hero-note">{flagged.length} things to improve, in {cohortCount} groups. A higher score means more room to win extra sales.</p>
+            {flagged.length > 0 ? <OpportunityRing score={overall} /> : <strong>Unverified</strong>}
+            <p className={`rp-verdict opp-${levelTone(overall)}`}>{flagged.length > 0 ? opportunityLevel(overall) + ' priority' : 'Insufficient evidence'}</p>
+            <p className="rp-hero-note">{flagged.length} things to improve, in {cohortCount} groups. Priority scores are heuristic, not predicted sales gains.</p>
           </div>
         </section>
 
@@ -214,7 +214,7 @@ export default function AuditReport({ state, createdAt, partial }: { state: Repo
         ))}
 
         {flagged.length === 0 && (
-          <section className="rp-section"><h2>No shortcomings found</h2><p className="rp-lede">Nothing we checked needs fixing right now.</p></section>
+          <section className="rp-section"><h2>No verified findings in this visit</h2><p className="rp-lede">No findings met the evidence requirements in this visit. This is not a clean bill of health.</p></section>
         )}
 
         <AdvancedFindings />

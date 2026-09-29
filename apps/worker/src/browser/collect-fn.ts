@@ -574,7 +574,7 @@ export function collectFn(): CollectResult {
    * ---------------------------------------------------------------- */
 
   const CURRENCY = /(?:[$£€¥₹]|\bRs\.?|\bUSD|\bEUR|\bGBP|\bINR)\s?\d[\d.,]*/;
-  const ADD_TO_CART = /add to (cart|bag|basket)|buy (it )?now|add to my|shop now — buy/i;
+  const ADD_TO_CART = /add to (cart|bag|basket)|buy (it )?now|^purchase$|add to my|shop now — buy/i;
 
   /**
    * Currency strings that are not the product's price.
@@ -620,7 +620,7 @@ export function collectFn(): CollectResult {
     if (!CURRENCY.test(t)) return false;
     if (PROMO.test(t)) return false;
     // Leaf-ish only, so a wrapper does not win over the element that renders it.
-    return el.querySelectorAll('*').length <= 2;
+    return el.querySelectorAll('*').length <= 2 || el.matches('[itemprop="price"], [data-price], [class*="price" i], .money');
   });
 
   // Prefer the element showing the price the page itself declared, then an

@@ -50,7 +50,7 @@ export function queueDepth(): { active: number; waiting: number } {
   return { active, waiting: waiting.length };
 }
 
-export function createJob(url: string): Job {
+export function createJob(url: string, productUrl?: string): Job {
   const job: Job = {
     id: randomUUID(),
     url,
@@ -78,7 +78,7 @@ export function createJob(url: string): Job {
   void (async () => {
     try {
       await acquireSlot();
-      await runAudit(url, emit);
+      await runAudit(url, emit, productUrl);
     } catch (err) {
       if (err instanceof QueueFull) {
         emit({ type: 'error', message: err.message, recoverable: true, at: 0 });

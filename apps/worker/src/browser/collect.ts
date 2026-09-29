@@ -1,3 +1,4 @@
+import { recheckProduct } from './product-verification.js';
 import { collectDuplicateScripts } from './duplicate-scripts.js';
 import { parseEventReceipt, repeatedEvents, type EventReceipt } from './duplicate-events.js';
 import { collectVisualObservations, stableVisualObservations } from './visual.js';
@@ -286,6 +287,8 @@ export async function collectPage(opts: CollectOptions): Promise<PageEvidence> {
       }
     }
 
+    const productVerification = role === 'product' && !signal.aborted
+      ? await recheckProduct(page, data, signal) : undefined;
     // The add-to-bag test runs in a separate, parallel session (probeOnly).
     const cartProbe: PageEvidence['cartProbe'] = undefined;
 
@@ -310,6 +313,7 @@ export async function collectPage(opts: CollectOptions): Promise<PageEvidence> {
       error,
       timing: { navMs, collectMs },
       ...data,
+      productVerification,
       visualObservations,
       duplicateScripts,
       repeatedEvents: repeatedEvents(eventReceipts),

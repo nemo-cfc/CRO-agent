@@ -367,6 +367,7 @@ export const CartProbeSchema = z.object({
 export type CartProbe = z.infer<typeof CartProbeSchema>;
 
 export const PageEvidenceSchema = z.object({
+  productVerification: z.object({policy:z.literal('product-v2'),samples:z.number(),scrolled:z.boolean(),elapsedMs:z.number(),price:z.enum(['observed','unverified']),buy:z.enum(['observed','unverified']),completed:z.boolean()}).optional(),
   duplicateScripts: z.array(z.object({provider:z.enum(['Meta','Google Ads / Analytics','Google Tag Manager']),source:z.string(),count:z.number().int().min(2)})).optional(),
   repeatedEvents: z.array(z.object({ provider: z.enum(['Meta','Google Ads']), tagId:z.string(), eventName:z.string(),endpoint:z.string(),count:z.number().int().min(2),intervalMs:z.number() })).optional(),
   /** Repeated, unobscured observations. Absent in reports made before visible-v1. */
@@ -549,6 +550,7 @@ export const AuditEventSchema = z.discriminatedUnion('type', [
 export type AuditEvent = z.infer<typeof AuditEventSchema>;
 
 export const StartAuditRequestSchema = z.object({
+  productUrl: z.string().min(1).nullable().optional(),
   url: z.string().min(1),
 });
 export type StartAuditRequest = z.infer<typeof StartAuditRequestSchema>;

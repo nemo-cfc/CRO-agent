@@ -13,7 +13,7 @@ export interface RuleContext {
 
 export function buildContext(evidence: AuditEvidence): RuleContext {
   const find = (role: string, vp: string) =>
-    evidence.pages.find((p) => p.role === role && p.viewport === vp && p.ok) ?? null;
+    evidence.pages.find((p) => p.role === role && p.viewport === vp && p.ok && !p.error) ?? null;
 
   const homeDesktop = find('home', 'desktop');
   const homeMobile = find('home', 'mobile');

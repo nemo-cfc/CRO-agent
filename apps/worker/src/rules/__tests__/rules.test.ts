@@ -206,7 +206,7 @@ describe('degradation', () => {
     expect(byId(checks, 'cta.copy').status).toBe('pass');
   });
 
-  it('still audits a page that rendered but never finished loading', () => {
+  it('withholds interface conclusions from an unfinished page', () => {
     // Heavy commerce pages routinely sit at readyState "interactive" with a
     // complete DOM while a slow third-party script keeps the load event from
     // firing. Those carry a warning in `error` but must remain `ok` and be
@@ -223,7 +223,7 @@ describe('degradation', () => {
       ],
     });
     const { checks, scorecard } = runRules(ev);
-    expect(byId(checks, 'aboveFold.ctaMobile').status).toBe('fail');
+    expect(checks.some(c => c.id === 'aboveFold.ctaMobile')).toBe(false);
     expect(scorecard.overall).toBeGreaterThan(0);
   });
 

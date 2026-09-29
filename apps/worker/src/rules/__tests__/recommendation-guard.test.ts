@@ -18,11 +18,9 @@ const candidate: Recommendation = {
 };
 
 describe('recommendation guard', () => {
-  it("keeps the model's own wording for rule-check recommendations", () => {
+  it('rejects model advice based on unverified rule checks', () => {
     const rec = groundedRecommendation(candidate, [rule('cta.tapTarget')])!;
-    expect(rec.title).toBe(candidate.title);
-    expect(rec.fix).toBe(candidate.fix);
-    expect(rec.severity).toBe('high'); // critical is capped
+    expect(rec).toBeNull();
   });
 
   it('rejects unknown and passing checks, and empty citations', () => {

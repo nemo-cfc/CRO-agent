@@ -23,12 +23,12 @@ export const UNRELIABLE_CHECKS: ReadonlySet<string> = new Set([
 
 /**
  * Whether the model may base a recommendation on this check: a vetted
- * observation, or a failing/warning rule check that is not known-unreliable.
+ * observation. Heuristic warnings alone are never proof of a public finding.
  */
 export function isRecommendable(check: Check): boolean {
   if (isPublishableFinding(check)) return true;
   if (check.id.startsWith('visual.') || check.id.startsWith('observed.')) return false;
-  return (check.status === 'fail' || check.status === 'warn') && check.weight > 0 && !UNRELIABLE_CHECKS.has(check.id);
+  return false; // Unverified heuristic diagnostics are not public findings.
 }
 
 export function visibleRecommendations(recommendations: Recommendation[], checks: Check[]) {

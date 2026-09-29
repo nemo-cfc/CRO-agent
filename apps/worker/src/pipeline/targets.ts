@@ -17,15 +17,17 @@ export async function pickTargets(
   platform: Platform,
   staticEvidence: StaticEvidence | null,
   signal: AbortSignal,
+  selectedProduct?: string,
 ): Promise<{ targets: AuditTarget[]; notes: string[] }> {
   const notes: string[] = [];
   const targets: AuditTarget[] = [
     { url: homepage, role: 'home', reason: 'Where most first-time visitors land' },
   ];
 
+  if (selectedProduct) targets.push({url: selectedProduct, role: 'product', reason: 'Product selected by the user'});
   if (!staticEvidence) return { targets, notes };
 
-  if (!isStore(platform)) {
+  if (!isStore(platform) && !selectedProduct) {
     const key = pickKeyPage(staticEvidence.finalUrl, staticEvidence);
     if (key) targets.push({ url: key.url, role: 'keypage', reason: key.reason });
     return { targets, notes };
@@ -41,6 +43,7 @@ export async function pickTargets(
     });
   }
 
+  if (selectedProduct) return { targets, notes };
   let productUrl = found.product;
 
   // Stores that merchandise categories rather than individual items do not

@@ -91,3 +91,13 @@ export async function assertPublicHost(url: URL): Promise<void> {
     if (priv) throw new UrlRejected('That address resolves to a private network.');
   }
 }
+
+/** A selected product must belong to the store and pass the same public-host validation. */
+export async function validateProductUrl(store: URL, input?: string | null): Promise<string | undefined> {
+  if (input == null) return undefined;
+  if (typeof input !== 'string') throw new UrlRejected('Invalid product URL.');
+  const product = normalizeUrl(input);
+  if (product.username || product.password || product.hostname.replace(/^www\./i, '').toLowerCase() !== store.hostname.replace(/^www\./i, '').toLowerCase()) throw new UrlRejected('Choose a product from the same store.');
+  await assertPublicHost(product);
+  return product.toString();
+}

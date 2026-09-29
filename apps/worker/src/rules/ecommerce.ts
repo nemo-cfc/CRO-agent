@@ -134,8 +134,8 @@ export function cartChecks(probe: PageEvidence['cartProbe'] | null): Check[] {
 function pick(ctx: RuleContext, role: 'product' | 'collection'): PageEvidence | null {
   // Mobile first — it is where store traffic and store problems live.
   return (
-    ctx.evidence.pages.find((p) => p.role === role && p.viewport === 'mobile' && p.ok) ??
-    ctx.evidence.pages.find((p) => p.role === role && p.ok) ??
+    ctx.evidence.pages.find((p) => p.role === role && p.viewport === 'mobile' && p.ok && !p.error) ??
+    ctx.evidence.pages.find((p) => p.role === role && p.ok && !p.error) ??
     null
   );
 }
@@ -168,7 +168,7 @@ function productChecks(page: PageEvidence | null): Check[] {
         : e.priceVisible
           ? `The price (${e.priceText}) is on the page but below the fold. Price is the first thing a shopper looks for; making them hunt for it adds doubt.`
           : 'The collector could not verify the product price. This is not evidence that the page has no price.',
-      evidence: { priceText: e.priceText, aboveFold: e.priceAboveFold },
+      evidence: { priceText: e.priceText, aboveFold: e.priceAboveFold, url: page.finalUrl, viewport: page.viewport, verification: JSON.stringify(page.productVerification ?? null) },
     }),
   );
 
@@ -189,6 +189,7 @@ function productChecks(page: PageEvidence | null): Check[] {
           : 'The collector could not verify the buy control. This is not evidence that the page has no buy button.',
       evidence: {
         text: e.addToCartText,
+        url: page.finalUrl, viewport: page.viewport, verification: JSON.stringify(page.productVerification ?? null),
         aboveFold: e.addToCartAboveFold,
         width: e.addToCartWidth,
         height: e.addToCartHeight,

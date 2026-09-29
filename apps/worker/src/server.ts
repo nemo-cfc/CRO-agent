@@ -4,7 +4,7 @@ import { StartAuditRequestSchema } from '@cro/shared';
 import { config } from './config.js';
 import { pool } from './browser/pool.js';
 import { createJob, getJob, queueDepth, subscribe } from './jobs.js';
-import { assertPublicHost, normalizeUrl, UrlRejected } from './pipeline/url.js';
+import { assertPublicHost, normalizeUrl, validateProductUrl, UrlRejected } from './pipeline/url.js';
 
 const app = Fastify({
   logger: { level: process.env.LOG_LEVEL ?? 'info' },
@@ -27,17 +27,18 @@ app.post('/audit', async (request, reply) => {
     return reply.code(400).send({ error: 'Send a JSON body with a "url" field.' });
   }
 
-  let url: URL;
+  let url: URL; let productUrl: string | undefined;
   try {
     url = normalizeUrl(parsed.data.url);
     // The URL is user-supplied and this worker sits inside a private network.
     await assertPublicHost(url);
+    productUrl = await validateProductUrl(url, parsed.data.productUrl);
   } catch (err) {
     if (err instanceof UrlRejected) return reply.code(400).send({ error: err.message });
     throw err;
   }
 
-  const job = createJob(url.toString());
+  const job = createJob(url.toString(), productUrl);
   return reply.code(202).send({ jobId: job.id, url: url.toString() });
 });
 

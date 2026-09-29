@@ -12,7 +12,7 @@ import { attachShots } from './attach-shots.js';
 
 export type Emit = (event: AuditEvent) => void;
 
-export async function runAudit(url: string, emit: Emit): Promise<void> {
+export async function runAudit(url: string, emit: Emit, productUrl?: string): Promise<void> {
   const started = Date.now();
   const at = () => Date.now() - started;
   const notes: string[] = [];
@@ -49,6 +49,7 @@ export async function runAudit(url: string, emit: Emit): Promise<void> {
       platform,
       staticEvidence,
       signal,
+      productUrl,
     );
     notes.push(...targetNotes);
 
@@ -143,6 +144,10 @@ export async function runAudit(url: string, emit: Emit): Promise<void> {
           hasCheckout: false, checkoutText: null, hasContinueShopping: false, hasRecommendations: false,
           hasFreeShippingMessage: false, hasExpressPay: false, ms: 0,
         };
+        if (!target.ecommerce.addToCartText && target.cartProbe.status !== 'failed' && target.cartProbe.status !== 'no-feedback' && target.cartProbe.buttonText) {
+          target.ecommerce.addToCartText = target.cartProbe.buttonText;
+          notes.push('Buy control confirmed in the independent cart session; arrival visibility remains unverified.');
+        }
         target.elementShots = [...(target.elementShots ?? []), ...(probeLoad.elementShots ?? [])];
       }
     }
@@ -242,7 +247,7 @@ export async function runAudit(url: string, emit: Emit): Promise<void> {
     emit({
       type: 'done',
       durationMs: at(),
-      partial: !result.ok || loaded.length < pages.length,
+      partial: !result.ok || loaded.length < pages.length || loaded.some(p => p.error !== null),
       notes,
       at: at(),
     });

@@ -1,7 +1,7 @@
 import { NextRequest } from 'next/server';
 import type { AuditEvent } from '@cro/shared';
 import { runAudit } from '../../../../worker/src/pipeline/run.js';
-import { assertPublicHost, normalizeUrl, UrlRejected } from '../../../../worker/src/pipeline/url.js';
+import { assertPublicHost, normalizeUrl, validateProductUrl, UrlRejected } from '../../../../worker/src/pipeline/url.js';
 
 // Chromium needs the Node runtime; the edge runtime cannot launch a process.
 export const runtime = 'nodejs';
@@ -23,12 +23,13 @@ export const maxDuration = 60;
  * entirely: one request, one instance, events written as they happen.
  */
 export async function POST(request: NextRequest) {
-  let target: URL;
+  let target: URL; let productUrl: string | undefined;
   try {
-    const body = (await request.json()) as { url?: string };
+    const body = (await request.json()) as { url?: string; productUrl?: string };
     target = normalizeUrl(body.url ?? '');
     // The URL is user-supplied and this function has outbound network access.
     await assertPublicHost(target);
+    productUrl = await validateProductUrl(target, body.productUrl);
   } catch (err) {
     const message = err instanceof UrlRejected ? err.message : 'Send a JSON body with a "url" field.';
     return Response.json({ error: message }, { status: 400 });
@@ -49,7 +50,7 @@ export async function POST(request: NextRequest) {
       };
 
       try {
-        await runAudit(target.toString(), send);
+        await runAudit(target.toString(), send, productUrl);
       } catch (err) {
         send({
           type: 'error',

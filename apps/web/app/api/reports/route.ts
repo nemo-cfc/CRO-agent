@@ -1,5 +1,5 @@
 import { storeUrl } from '@/lib/lead';
-import { assertPublicHost } from '../../../../worker/src/pipeline/url.js';
+import { assertPublicHost, validateProductUrl } from '../../../../worker/src/pipeline/url.js';
 import { after } from 'next/server';
 import { randomUUID } from 'node:crypto';
 import type { AuditEvent } from '@cro/shared';
@@ -10,8 +10,8 @@ export const runtime='nodejs';
 export const maxDuration=180;
 export async function POST(request:Request){
  const origin=request.headers.get('origin'); const allowedOrigins=new Set([new URL(request.url).origin,process.env.URL,process.env.DEPLOY_PRIME_URL,process.env.SITE_URL].filter(Boolean)); if(origin && !allowedOrigins.has(origin))return Response.json({error:'Request origin is not allowed.'},{status:403});
- let url:string;
- try{const text=await request.text();if(text.length>4096)throw new Error();const body=JSON.parse(text);if(typeof body.url!=='string')throw new Error();url=storeUrl(body.url);await assertPublicHost(new URL(url));
+ let url:string; let productUrl: string | undefined;
+ try{const text=await request.text();if(text.length>4096)throw new Error();const body=JSON.parse(text);if(typeof body.url!=='string')throw new Error();url=storeUrl(body.url);await assertPublicHost(new URL(url));productUrl=await validateProductUrl(new URL(url),body.productUrl);
  }catch{return Response.json({error:'Enter a publicly accessible store URL.'},{status:400});}
  const limit=checkAuditLimit(clientIp(request),url);
  if(!limit.allowed)return Response.json({error:limit.reason==='duplicate'?'This store was audited recently. Please try again later.':'You have reached the audit limit. Please try again later.'},{status:429,headers:{'Retry-After':String(limit.retryAfter),'Cache-Control':'no-store'}});
@@ -22,7 +22,7 @@ export async function POST(request:Request){
   try{
    const worker=process.env.WORKER_URL || process.env.NEXT_PUBLIC_WORKER_URL || 'http://localhost:8787';
    const signal=AbortSignal.timeout(150000);
-   const started=await fetch(worker+'/audit',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({url}),signal});
+   const started=await fetch(worker+'/audit',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({url,productUrl}),signal});
    const job=await started.json();if(!started.ok||!job.jobId)throw new Error(job.error||'The audit could not start.');
    const response=await fetch(worker+'/audit/'+job.jobId+'/stream',{signal});
    if(!response.ok||!response.body)throw new Error('The audit connection could not be opened.');

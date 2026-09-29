@@ -34,7 +34,10 @@ export async function POST(request:Request){
     }
    }
    if(!finished)throw new Error('The audit connection ended before the report was complete.');
-   report.status=report.state.scorecard?'done':'error';
+   // Older workers still publish a raw-HTML-only result when no page rendered; it has nothing to show.
+   const unrendered=report.state.notes.some(n=>n.startsWith('The page could not be rendered in a browser'));
+   if(unrendered)report.state.status='error',report.state.error='We could not open this store in our browser. Please try again in a minute.';
+   report.status=report.state.scorecard&&!unrendered?'done':'error';
    if(report.status==='error')report.state.error ||= 'We could not measure this store. Check that it is publicly accessible.';
   }catch(error){report.status='error';report.state.status='error';report.state.error=error instanceof Error?error.message:'The audit failed. Please retry.';}
   await saveReport(report);

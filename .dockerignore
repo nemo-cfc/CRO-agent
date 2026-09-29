@@ -1,0 +1,13 @@
+**/node_modules
+**/dist
+**/.next
+**/*.tsbuildinfo
+.browsers
+.git
+.env
+.env.*
+!.env.example
+# Only the web app's manifest is needed, so npm ci matches the lockfile.
+apps/web/*
+!apps/web/package.json
+bench-results

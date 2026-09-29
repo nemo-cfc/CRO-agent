@@ -100,13 +100,13 @@ export function ctaRules(ctx: RuleContext): Check[] {
           id: 'cta.keyPage',
           category: 'cta',
           title: 'High-intent page has a visible action',
-          status: key.ctasAboveFold > 0 ? 'pass' : 'fail',
+          status: key.ctasAboveFold > 0 ? 'pass' : 'na',
           weight: 1.5,
           scope: 'keypage',
           detail:
             key.ctasAboveFold > 0
               ? `${key.ctasAboveFold} action${key.ctasAboveFold === 1 ? '' : 's'} above the fold on ${key.finalUrl}.`
-              : `No action is visible above the fold on ${key.finalUrl} — the page a visitor reaches once they have already decided.`,
+              : `The collector could not verify an above-fold action on ${key.finalUrl}. Absence is not established.`,
           evidence: { url: key.finalUrl, ctasAboveFold: key.ctasAboveFold },
         })
       : skipped('cta.keyPage', 'cta', 'High-intent page has a visible action', 'No second page was audited.'),

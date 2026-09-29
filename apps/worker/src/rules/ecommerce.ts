@@ -160,14 +160,14 @@ function productChecks(page: PageEvidence | null): Check[] {
       id: 'ecommerce.price',
       category: 'ecommerce',
       title: 'Price is visible without scrolling',
-      status: e.priceAboveFold ? 'pass' : e.priceVisible ? 'warn' : 'fail',
+      status: e.priceAboveFold ? 'pass' : e.priceVisible ? 'warn' : 'na',
       weight: 2,
       scope: 'product',
       detail: e.priceAboveFold
         ? `Price (${e.priceText}) is visible on arrival.`
         : e.priceVisible
           ? `The price (${e.priceText}) is on the page but below the fold. Price is the first thing a shopper looks for; making them hunt for it adds doubt.`
-          : 'No price could be found on the product page. If price is hidden behind a variant choice, shoppers who are only comparing will leave.',
+          : 'The collector could not verify the product price. This is not evidence that the page has no price.',
       evidence: { priceText: e.priceText, aboveFold: e.priceAboveFold },
     }),
   );
@@ -177,7 +177,7 @@ function productChecks(page: PageEvidence | null): Check[] {
       id: 'ecommerce.addToCart',
       category: 'ecommerce',
       title: 'Add to cart is reachable on arrival',
-      status: e.addToCartAboveFold ? 'pass' : e.addToCartText ? 'warn' : 'fail',
+      status: e.addToCartAboveFold ? 'pass' : e.addToCartText ? 'warn' : 'na',
       weight: 2,
       scope: 'product',
       detail: e.addToCartAboveFold
@@ -186,7 +186,7 @@ function productChecks(page: PageEvidence | null): Check[] {
           : `"${e.addToCartText}" is visible above the fold at 390px.`
         : e.addToCartText
           ? `"${e.addToCartText}" sits below the fold on mobile. On a product page the buy button should never require a scroll to find.`
-          : 'No add-to-cart button was found on the product page.',
+          : 'The collector could not verify the buy control. This is not evidence that the page has no buy button.',
       evidence: {
         text: e.addToCartText,
         aboveFold: e.addToCartAboveFold,

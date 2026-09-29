@@ -1,5 +1,5 @@
 import {
-  CATEGORIES,
+  CATEGORIES, UNRELIABLE_CHECKS,
   CATEGORY_WEIGHTS,
   type CategoryScore,
   type Check,
@@ -25,7 +25,7 @@ export function scoreChecks(checks: Check[]): Scorecard {
   const present = CATEGORIES.filter((category) => checks.some((c) => c.category === category));
   const categories: CategoryScore[] = present.map((category) => {
     const own = checks.filter((c) => c.category === category);
-    const applicable = own.filter((c) => c.status !== 'na' && c.weight > 0);
+    const applicable = own.filter((c) => c.status !== 'na' && c.weight > 0 && !UNRELIABLE_CHECKS.has(c.id));
 
     const totalWeight = applicable.reduce((s, c) => s + c.weight, 0);
     const earned = applicable.reduce((s, c) => s + c.weight * CREDIT[c.status], 0);

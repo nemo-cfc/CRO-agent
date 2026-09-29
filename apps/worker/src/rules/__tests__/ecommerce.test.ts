@@ -125,18 +125,18 @@ describe('store checks', () => {
     expect(byId(runRules(ev).checks, 'ecommerce.addToCart').status).toBe('warn');
   });
 
-  it('fails a product page with no buy button at all', () => {
+  it('leaves an undetected buy button unverified', () => {
     const ev = withRole('product', {
       ecommerce: { ...page().ecommerce, addToCartText: null, addToCartAboveFold: false },
     });
-    expect(byId(runRules(ev).checks, 'ecommerce.addToCart').status).toBe('fail');
+    expect(byId(runRules(ev).checks, 'ecommerce.addToCart').status).toBe('na');
   });
 
-  it('fails a product page with no price', () => {
+  it('leaves an undetected price unverified', () => {
     const ev = withRole('product', {
       ecommerce: { ...page().ecommerce, priceVisible: false, priceAboveFold: false, priceText: null },
     });
-    expect(byId(runRules(ev).checks, 'ecommerce.price').status).toBe('fail');
+    expect(byId(runRules(ev).checks, 'ecommerce.price').status).toBe('na');
   });
 
   it('fails a product page with no reviews', () => {

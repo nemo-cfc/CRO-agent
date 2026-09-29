@@ -1,7 +1,7 @@
 'use client';
 import type { Check } from '@cro/shared';
 import {
-  COHORT_LABELS, ROLE_LABELS, SECTION_LABELS,
+  COHORT_LABELS, ROLE_LABELS, SECTION_LABELS, isRecommendable,
   cohortOf, combinedOpportunity, displayTitle, opportunityLevel,
   opportunityScore, plainLanguage, sectionOf, type BusinessImpact, type Cohort, type PageSection,
 } from '@cro/shared';
@@ -115,7 +115,7 @@ export default function AuditReport({ state, createdAt, partial }: { state: Repo
 
   // Only shortcomings: flagged checks, scored and sorted by opportunity.
   const flagged = state.checks
-    .filter((c) => c.status === 'fail' || c.status === 'warn')
+    .filter(isRecommendable)
     .map((check) => ({ check, score: opportunityScore(check) }))
     .sort((a, b) => b.score - a.score);
 

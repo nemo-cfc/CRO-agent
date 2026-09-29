@@ -16,15 +16,9 @@ export function isPublishableFinding(check: Check): boolean {
   return isVisibleFinding(check) || (check.id.startsWith('observed.duplicate-script.') && check.evidence.policy === 'script-v1' && check.evidence.confirmed === true && typeof check.evidence.count === 'number' && check.evidence.count >= 2 && typeof check.evidence.source === 'string' && typeof check.evidence.suggestion === 'string' && typeof check.evidence.url === 'string') || (check.id.startsWith('observed.repeated-event.') && check.evidence.policy === 'network-v1' && check.evidence.confirmed === true && typeof check.evidence.count === 'number' && check.evidence.count >= 2 && typeof check.evidence.url === 'string' && typeof check.evidence.suggestion === 'string');
 }
 
-/**
- * Rule checks whose detection is known to be wrong on real stores. They stay
- * in the diagnostics list but are never handed to the model as grounds for
- * advice. Empty after the multi-store accuracy pass (Sept 2026): contrast,
- * pop-up, grid, sort/filter, shipping/returns and option-count detection were
- * fixed and re-verified on SKIMS, Allbirds, Death Wish, Bellroy, Ruggable and
- * Bombay Shaving. Add an id here the moment a check is shown to be wrong.
- */
+/** Quarantined after real-store false positives; exclude from advice and scoring. */
 export const UNRELIABLE_CHECKS: ReadonlySet<string> = new Set([
+  'ecommerce.price', 'ecommerce.addToCart', 'cta.keyPage',
 ]);
 
 /**

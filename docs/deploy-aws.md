@@ -8,7 +8,7 @@ Shopper ──> Vercel (apps/web) ──WORKER_URL + WORKER_TOKEN──> AWS (ap
                  └── Vercel Blob (reports, leads, grants)
 ```
 
-The recommended setup is **one small always-on server running the worker's Docker image**, for about **$12–15 a month**. It is sized for the expected load, audits from ad traffic at around 5–10 a day, and has headroom far beyond that. Section 6 covers when to move to something bigger.
+The recommended setup is **one small always-on server running the worker's Docker image**, for about **$12–15 a month**. It is sized for the expected load, audits from ad traffic, planned for up to 25 a day. One audit takes about 45 seconds, so even 25 arriving in the same hour finish without queuing for long. Section 6 covers when to move to something bigger.
 
 ## Why an always-on server, not Lambda
 

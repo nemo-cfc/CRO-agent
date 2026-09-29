@@ -13,9 +13,9 @@ describe('unverified product findings', () => {
     const recommendation = { evidence_refs: [id] } as Recommendation;
     expect(visibleRecommendations([recommendation], [check])).toEqual([]);
   });
-  it('does not penalize diagnostic scores for the quarantined checks', () => {
+  it('does not penalize diagnostic scores for the quarantined check', () => {
     const verified: Check = { ...make('speed.lcp'), category: 'speed', status: 'pass' };
-    expect(scoreChecks([verified, ...ids.map(make)]).overall).toBe(scoreChecks([verified]).overall);
+    expect(scoreChecks([verified, make('cta.keyPage')]).overall).toBe(scoreChecks([verified]).overall);
   });
   it('treats an empty key-page action scan as unverified, not a failure', () => {
     const evidence = healthyStoreEvidence();

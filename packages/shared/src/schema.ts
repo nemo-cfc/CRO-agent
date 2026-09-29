@@ -366,7 +366,38 @@ export const CartProbeSchema = z.object({
 });
 export type CartProbe = z.infer<typeof CartProbeSchema>;
 
+/** Whole-product-page scan (worker/src/browser/product-scan.ts). */
+export const ProductScanSchema = z.object({
+  policy: z.literal('scan-v1'),
+  completed: z.boolean(),
+  sections: z.number(),
+  pageHeight: z.number(),
+  elapsedMs: z.number(),
+  textLength: z.number(),
+  price: z.string().nullable(),
+  priceSource: z.enum(['structured', 'shopify', 'text']).nullable(),
+  available: z.boolean().nullable(),
+  buyControl: z.string().nullable(),
+  images: z.number(),
+  imagesSource: z.enum(['shopify', 'structured', 'gallery']).nullable(),
+  video: z.boolean(),
+  shipping: z.string().nullable(),
+  returns: z.string().nullable(),
+  payment: z.array(z.string()),
+  stock: z.string().nullable(),
+  reviewsWidget: z.boolean(),
+  reviewCount: z.number().nullable(),
+  rating: z.number().nullable(),
+  reviewsEmpty: z.boolean(),
+});
+export type ProductScan = z.infer<typeof ProductScanSchema>;
+
+export const SectionShotSchema = z.object({ index: z.number(), y: z.number(), dataUri: z.string() });
+export type SectionShot = z.infer<typeof SectionShotSchema>;
+
 export const PageEvidenceSchema = z.object({
+  productScan: ProductScanSchema.optional(),
+  sectionShots: z.array(SectionShotSchema).optional(),
   productVerification: z.object({policy:z.literal('product-v2'),samples:z.number(),scrolled:z.boolean(),elapsedMs:z.number(),price:z.enum(['observed','unverified']),buy:z.enum(['observed','unverified']),completed:z.boolean()}).optional(),
   duplicateScripts: z.array(z.object({provider:z.enum(['Meta','Google Ads / Analytics','Google Tag Manager']),source:z.string(),count:z.number().int().min(2)})).optional(),
   repeatedEvents: z.array(z.object({ provider: z.enum(['Meta','Google Ads']), tagId:z.string(), eventName:z.string(),endpoint:z.string(),count:z.number().int().min(2),intervalMs:z.number() })).optional(),
@@ -512,6 +543,13 @@ export const AuditEventSchema = z.discriminatedUnion('type', [
     type: z.literal('checks'),
     checks: z.array(CheckSchema),
     scorecard: ScorecardSchema,
+    at: z.number(),
+  }),
+  z.object({
+    type: z.literal('sections'),
+    role: PageRoleSchema,
+    url: z.string(),
+    shots: z.array(SectionShotSchema),
     at: z.number(),
   }),
   z.object({

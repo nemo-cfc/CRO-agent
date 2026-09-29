@@ -127,6 +127,9 @@ export async function runAudit(url: string, emit: Emit, productUrl?: string): Pr
               at: at(),
             });
           }
+          if (page.sectionShots?.length) {
+            emit({ type: 'sections', role: page.role, url: page.finalUrl, shots: page.sectionShots, at: at() });
+          }
           return page;
         }),
       ),

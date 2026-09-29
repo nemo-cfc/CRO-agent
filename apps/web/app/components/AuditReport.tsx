@@ -217,6 +217,27 @@ export default function AuditReport({ state, createdAt, partial }: { state: Repo
           <section className="rp-section"><h2>No verified findings in this visit</h2><p className="rp-lede">No findings met the evidence requirements in this visit. This is not a clean bill of health.</p></section>
         )}
 
+        {(state.sections ?? []).filter((s) => s.shots.length > 0).map((s) => (
+          <section key={s.url} className="rp-section rp-reviewed" id="what-we-reviewed">
+            <h2>What we reviewed on your product page</h2>
+            <p className="rp-lede">
+              Every section of <a href={s.url} target="_blank" rel="noopener noreferrer">{s.url.replace(/^https?:\/\/(www\.)?/, '').replace(/\?.*$/, '')}</a> as a
+              shopper on a phone sees it, top to bottom (pop-ups hidden). We also read the page’s hidden content, such as closed
+              tabs and accordions, and its product data. A finding above says something is missing only when none of this contains it.
+            </p>
+            <ol className="rp-reviewed-strip">
+              {s.shots.map((shot) => (
+                <li key={shot.index}>
+                  <a href={shot.dataUri} target="_blank" rel="noopener noreferrer" aria-label={`Open section ${shot.index + 1} full size`}>
+                    <img src={shot.dataUri} alt={`Product page, section ${shot.index + 1} of ${s.shots.length}`} loading="lazy" />
+                  </a>
+                  <span>Section {shot.index + 1}{shot.index === 0 ? ' · first screen' : ''}</span>
+                </li>
+              ))}
+            </ol>
+          </section>
+        ))}
+
         <AdvancedFindings />
 
         <DeeperAudit domain={domain} />

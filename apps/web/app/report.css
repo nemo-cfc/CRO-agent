@@ -350,3 +350,11 @@
   .rp-deeper-table tbody th { font-size: 17px; }
   .rp-deeper-table td::before { content: attr(data-label); display: block; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
 }
+
+/* Product page, section by section: the evidence behind the findings */
+.rp-reviewed-strip { list-style: none; margin: 18px 0 0; padding: 0 0 8px; display: grid; grid-auto-flow: column; grid-auto-columns: 168px; gap: 12px; overflow-x: auto; scroll-snap-type: x mandatory; }
+.rp-reviewed-strip li { scroll-snap-align: start; display: grid; gap: 6px; }
+.rp-reviewed-strip a { display: block; border-radius: 12px; overflow: hidden; border: 1px solid var(--line); background: var(--soft); }
+.rp-reviewed-strip img { display: block; width: 100%; height: auto; }
+.rp-reviewed-strip span { font-size: 12px; color: var(--muted); }
+@media print { .rp-reviewed-strip { grid-auto-flow: row; grid-template-columns: repeat(4, 1fr); overflow: visible; } }

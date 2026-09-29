@@ -176,7 +176,12 @@ export default function AuditReport({ state, createdAt, partial }: { state: Repo
           </div>
         </section>
 
-        {partial && <div className="rp-notice">Part of this visit did not finish in time, so a few items could not be checked.</div>}
+        {partial && (
+          <div className="rp-notice">
+            Part of this visit did not finish in time, so a few items could not be checked.
+            {state.notes.length > 0 && <ul>{state.notes.map((n) => <li key={n}>{n}</li>)}</ul>}
+          </div>
+        )}
 
         {top.length > 0 && (
           <section className="rp-section">

@@ -160,23 +160,17 @@ export async function runAudit(url: string, emit: Emit, productUrl?: string): Pr
     if (loaded.length === 0) {
       const reason = pages.find((p) => p.error)?.error ?? 'the page did not respond';
 
-      // Rendering failing does not necessarily mean the audit is worthless:
-      // if the HTML fetch succeeded we can still report every technical check.
-      // Only give up entirely when there is nothing at all to score.
-      if (!staticEvidence) {
-        emit({
-          type: 'error',
-          message: `Could not load ${url} — ${reason}.`,
-          recoverable: false,
-          at: at(),
-        });
-        emit({ type: 'done', durationMs: at(), partial: true, notes, at: at() });
-        return;
-      }
-
-      notes.push(
-        `The page could not be rendered in a browser (${reason}), so only the checks that can be read from the raw HTML are shown.`,
-      );
+      // Raw-HTML checks alone produce nothing the report may publish, so a
+      // "done" here delivered an empty report (motoradds.com). Fail instead,
+      // so the shopper is told to retry rather than shown a blank audit.
+      emit({
+        type: 'error',
+        message: `We could not open ${url} in our browser (${reason}). Please try again in a minute.`,
+        recoverable: false,
+        at: at(),
+      });
+      emit({ type: 'done', durationMs: at(), partial: true, notes, at: at() });
+      return;
     } else if (loaded.length < pages.length) {
       notes.push(`${pages.length - loaded.length} of ${pages.length} page views did not load in time.`);
     }

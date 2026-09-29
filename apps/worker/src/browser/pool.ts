@@ -72,6 +72,23 @@ export class BrowserPool {
     if (!isServerless()) await this.#fill();
   }
 
+  /**
+   * Health probe: relaunch Chromium if it died, within `timeoutMs`. Returns
+   * false when it cannot be started, so the host restarts the worker instead
+   * of letting it answer audits without a browser.
+   */
+  async healthy(timeoutMs = 10_000): Promise<boolean> {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const timeout = new Promise<false>((resolve) => { timer = setTimeout(() => resolve(false), timeoutMs); });
+    try {
+      return await Promise.race([this.#ensureBrowser().then((b) => b.isConnected()), timeout]);
+    } catch {
+      return false;
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
   async #ensureBrowser(): Promise<Browser> {
     if (this.#browser?.isConnected()) return this.#browser;
     if (this.#launching) return this.#launching;

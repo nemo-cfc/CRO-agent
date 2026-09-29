@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { displayTitle, type Check } from '@cro/shared';
+import { displayTitle, reportObservation, type Check } from '@cro/shared';
 import { runRules } from '../index.js';
 import { healthyEvidence, healthyStoreEvidence } from './fixtures.js';
 
@@ -22,7 +22,7 @@ describe('display titles', () => {
 
   it('has problem wording for every rule check the audit can flag', () => {
     const checks = [...runRules(healthyEvidence()).checks, ...runRules(healthyStoreEvidence()).checks]
-      .filter((c) => !c.id.startsWith('visual.') && !c.id.startsWith('observed.') && c.status !== 'na');
+      .filter((c) => !c.id.startsWith('visual.') && !c.id.startsWith('observed.') && c.status !== 'na' && !reportObservation(c));
     const missing = [...new Set(checks.filter((c) => displayTitle({ ...c, status: 'fail' }) === c.title).map((c) => c.id))];
     expect(missing).toEqual([]);
   });

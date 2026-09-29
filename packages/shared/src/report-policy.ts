@@ -1,3 +1,4 @@
+import { isMeasuredRecommendation } from './report-evidence.js';
 import type { Check, Recommendation } from './schema.js';
 
 export const VISIBLE_POLICY = 'visible-v1';
@@ -55,6 +56,7 @@ export function isRecommendable(check: Check): boolean {
   if ((check.status !== 'fail' && check.status !== 'warn') || check.weight <= 0 || UNRELIABLE_CHECKS.has(check.id)) return false;
   if (MEASURED_CHECKS.has(check.id)) return true;
   return check.evidence.verified === true;
+
 }
 
 export function visibleRecommendations(recommendations: Recommendation[], checks: Check[]) {

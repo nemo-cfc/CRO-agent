@@ -1,3 +1,4 @@
+import { reportObservation } from './report-evidence.js';
 import { isPublishableFinding } from './report-policy.js';
 import type { Check } from './schema.js';
 
@@ -558,6 +559,8 @@ export function opportunityLevel(score: number): 'High' | 'Moderate' | 'Low' {
 /** Plain-language wording for a flagged check. */
 export function plainLanguage(check: Check): { found: string; why: string; impact: BusinessImpact; fix: string } {
   if (isPublishableFinding(check)) return { found: check.detail, why: 'This observation was recorded during the sampled visit. Any effect on conversion needs validation.', fix: String(check.evidence.suggestion), impact: {statement: '', checkout: '', range: null, metric: null, area: null} };
+  const measured = reportObservation(check);
+  if (measured) return {found: measured.detail, why: measured.kind === 'design' ? 'This is a design recommendation to test, not a confirmed conversion loss.' : 'Measurements describe the sampled conditions; they do not prove a cause or a sales impact.', fix: measured.suggestion, impact: {statement: '', checkout: '', range: null, metric: null, area: null}};
   const { plain } = metaFor(check);
   return {
     found: plain.found ? plain.found(check) : check.detail,

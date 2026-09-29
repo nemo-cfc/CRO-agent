@@ -1,7 +1,7 @@
 'use client';
 import type { Check } from '@cro/shared';
 import {
-  COHORT_LABELS, ROLE_LABELS, SECTION_LABELS, isRecommendable,
+  COHORT_LABELS, ROLE_LABELS, SECTION_LABELS, isRecommendable, reportObservation,
   cohortOf, combinedOpportunity, displayTitle, opportunityLevel,
   opportunityScore, plainLanguage, sectionOf, type BusinessImpact, type Cohort, type PageSection,
 } from '@cro/shared';
@@ -113,7 +113,8 @@ export default function AuditReport({ state, createdAt, partial }: { state: Repo
   try { domain = new URL(domain).hostname.replace(/^www\./, ''); } catch {}
   const date = new Date(createdAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' });
 
-  // Only shortcomings: flagged checks, scored and sorted by opportunity.
+  const observations = state.checks.map(check => ({check, observation: reportObservation(check)})).filter(item => item.observation !== null);
+  // Recommendations and observations are separate: a healthy measurement is still useful.
   const flagged = state.checks
     .filter(isRecommendable)
     .map((check) => ({ check, score: opportunityScore(check) }))
@@ -214,8 +215,9 @@ export default function AuditReport({ state, createdAt, partial }: { state: Repo
         ))}
 
         {flagged.length === 0 && (
-          <section className="rp-section"><h2>No verified findings in this visit</h2><p className="rp-lede">No findings met the evidence requirements in this visit. This is not a clean bill of health.</p></section>
+          <section className="rp-section"><h2>No additional evidence-backed recommendations</h2><p className="rp-lede">The sampled evidence did not support further recommendations. Measurements and confirmed observations are listed below. This is not a clean bill of health.</p></section>
         )}
+
 
         {(state.sections ?? []).filter((s) => s.shots.length > 0).map((s) => (
           <section key={s.url} className="rp-section rp-reviewed" id="what-we-reviewed">
@@ -238,13 +240,19 @@ export default function AuditReport({ state, createdAt, partial }: { state: Repo
           </section>
         ))}
 
+
+        <section className="rp-section"><h2>Measurements and confirmed observations</h2>
+          <p className="rp-lede">Recorded results are shown even when they do not indicate a problem. Lab readings describe one sampled load; real-user results describe the source stated.</p>
+          {observations.length > 0 ? observations.map(({check, observation}) => <article className="rp-op" key={check.id}><h3>{observation!.title}</h3><p>{observation!.detail}</p></article>) : <p>No usable measurements were saved for this visit. Run a fresh audit to collect new evidence.</p>}
+        </section>
+
         <AdvancedFindings />
 
         <DeeperAudit domain={domain} />
 
         <section className="rp-section rp-method">
           <h2>How this report works</h2>
-          <p>We visited your {state.targets.length === 1 ? 'page' : 'homepage, a collection page and a product page'} with an automated browser on a phone-sized and a computer screen, and on the product page we added one item to the bag to see what a shopper gets back (no order is placed, and your analytics are not affected). Only things worth improving are listed. Each has an opportunity score from 0 to 100: an estimate of how much fixing it could help compared with the other items, not a sales forecast. The test targets under each business impact are illustrative ranges we commonly test for in that area, not predicted or guaranteed results for your store.</p>
+          <p>We visited your {state.targets.length === 1 ? 'page' : 'homepage, a collection page and a product page'} with an automated browser on a phone-sized and a computer screen, and on the product page we added one item to the bag to see what a shopper gets back (no order is placed, tracking suppression is attempted but cannot guarantee no analytics activity). The report separates observed measurements from suggestions. Unverified absence claims are withheld. Each has an opportunity score from 0 to 100: an estimate of how much fixing it could help compared with the other items, not a sales forecast. The test targets under each business impact are illustrative ranges we commonly test for in that area, not predicted or guaranteed results for your store.</p>
         </section>
       </main>
     </div>

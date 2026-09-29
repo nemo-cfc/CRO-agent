@@ -1,4 +1,4 @@
-import { isPublishableFinding, isRecommendable, type Check, type Recommendation } from '@cro/shared';
+import { reportObservation, isPublishableFinding, isRecommendable, type Check, type Recommendation } from '@cro/shared';
 
 const clip = (text: string, max: number) => {
   const t = text.replace(/\s+/g, ' ').trim();
@@ -35,6 +35,11 @@ export function groundedRecommendation(candidate: Recommendation, checks: Check[
     };
   }
 
+  if (sources.every(c => isPublishableFinding(c) || reportObservation(c))) {
+    return {title: reportObservation(first)?.title ?? first.title, category:first.category, severity:'medium',impact:'low',effort:'quick-win',
+      why_it_matters:sources.map(c => reportObservation(c)?.detail ?? c.detail).join(' '),
+      fix:sources.map(c => reportObservation(c)?.suggestion ?? String(c.evidence.suggestion)).join(' '),evidence_refs:refs};
+  }
   const title = clip(candidate.title, 120);
   const why = clip(candidate.why_it_matters, 700);
   const fix = clip(candidate.fix, 700);

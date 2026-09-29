@@ -49,7 +49,7 @@ export function ctaRules(ctx: RuleContext): Check[] {
                 : 'fail',
           weight: 1.25,
           detail: `"${mobilePrimary.text}" measures ${mobilePrimary.width}×${mobilePrimary.height}px on mobile. 44×44px is the accepted minimum for a comfortable tap.`,
-          evidence: { text: mobilePrimary.text, width: mobilePrimary.width, height: mobilePrimary.height },
+          evidence: { text: mobilePrimary.text, width: mobilePrimary.width, height: mobilePrimary.height, url: ctx.homeMobile!.finalUrl },
         })
       : skipped('cta.tapTarget', 'cta', 'Primary button is thumb-sized on mobile', 'Mobile view did not load.'),
   );

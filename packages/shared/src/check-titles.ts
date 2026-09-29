@@ -1,3 +1,4 @@
+import { reportObservation } from './report-evidence.js';
 import type { Check } from './schema.js';
 
 /**
@@ -82,6 +83,8 @@ const ISSUE_TITLES: Record<string, string | ((c: Check) => string)> = {
 
 /** The title to show: the goal when it is met or not measured, the problem when it is not. */
 export function displayTitle(check: Check): string {
+  const observed = reportObservation(check);
+  if (observed) return observed.title;
   if (check.status !== 'fail' && check.status !== 'warn') return check.title;
   const issue = ISSUE_TITLES[check.id];
   if (!issue) return check.title;

@@ -41,7 +41,7 @@ export function mobileRules(ctx: RuleContext): Check[] {
       detail: m.mobile.horizontalOverflow
         ? `The page is ${m.mobile.overflowPx}px wider than a 390px screen, so content sits off the edge and the whole layout slides under the thumb.`
         : 'Content fits the 390px viewport with no horizontal scroll.',
-      evidence: { overflowPx: m.mobile.overflowPx },
+      evidence: { overflowPx: m.mobile.overflowPx, url: m.finalUrl, viewportWidth: 390 },
     }),
   );
 

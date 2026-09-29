@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  cohortOf, combinedOpportunity, opportunityScore,
+  cohortOf, combinedOpportunity, opportunityScore, reportObservation,
   plainLanguage, sectionOf, TEST_TARGETS, type Check,
 } from '@cro/shared';
 import { runRules } from '../index.js';
@@ -49,6 +49,7 @@ describe('opportunity scoring', () => {
       const p = plainLanguage(c);
       expect(p.found.length, c.id).toBeGreaterThan(0);
       expect(p.fix.length, c.id).toBeGreaterThan(0);
+      if (reportObservation(c)) { expect(p.impact.range).toBeNull(); expect(p.impact.statement).toBe(''); continue; }
       expect(p.impact.statement.length, `${c.id} needs a business-impact statement`).toBeGreaterThan(0);
       expect(p.impact.checkout.length, `${c.id} needs a checkout-impact statement`).toBeGreaterThan(0);
       expect(p.impact.statement, c.id).not.toMatch(/\d+\s*%/);

@@ -129,8 +129,11 @@ const PATTERNS: Record<Platform, UrlPatterns> = {
 };
 
 /** Paths that match a product pattern but are never a product page. */
+// Gift cards and other non-merchandise are matched anywhere in the path:
+// "/products/the-reistor-gift-card" and "/products/rise-ai-giftcard" were
+// both audited as a store's "product page".
 const NOT_A_PRODUCT =
-  /\/(cart|checkout|account|login|register|search|wishlist|compare|gift-card)\b/i;
+  /\/(cart|checkout|account|login|register|search|wishlist|compare)\b|gift[-_]?cards?|e-?gift|gift[-_]?(voucher|certificate)s?|\/products\/[^/]*\b(sample|swatch|warranty|insurance|shipping-protection|route-protection|donation)s?\b/i;
 
 /** Collections that exist but tell you nothing about merchandising. */
 const WEAK_COLLECTION = /\/collections\/(all|frontpage)\/?$/i;

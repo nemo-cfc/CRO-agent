@@ -17,3 +17,12 @@ describe('selected products and publication', () => {
   expect(isRecommendable({id:'future.missingThing',status:'fail',weight:2,evidence:{}} as Check)).toBe(false);
  });
 });
+
+describe('automatic product pick', () => {
+  it('never picks a gift card, however the store names it', async () => {
+    const { findProductInSitemap } = await import('../../pipeline/platform.js');
+    const xml = ['/products/the-reistor-gift-card', '/products/rise-ai-giftcard', '/products/e-gift-voucher', '/products/modal-racerback-tank']
+      .map((p) => `<url><loc>https://shop.example.com${p}</loc></url>`).join('');
+    expect(findProductInSitemap('shopify', xml)).toBe('https://shop.example.com/products/modal-racerback-tank');
+  });
+});

@@ -22,9 +22,10 @@ export async function POST(request:Request){
   try{
    const worker=process.env.WORKER_URL || process.env.NEXT_PUBLIC_WORKER_URL || 'http://localhost:8787';
    const signal=AbortSignal.timeout(150000);
-   const started=await fetch(worker+'/audit',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({url,productUrl}),signal});
+   const auth:Record<string,string>=process.env.WORKER_TOKEN?{Authorization:'Bearer '+process.env.WORKER_TOKEN}:{};
+   const started=await fetch(worker+'/audit',{method:'POST',headers:{'Content-Type':'application/json',...auth},body:JSON.stringify({url,productUrl}),signal});
    const job=await started.json();if(!started.ok||!job.jobId)throw new Error(job.error||'The audit could not start.');
-   const response=await fetch(worker+'/audit/'+job.jobId+'/stream',{signal});
+   const response=await fetch(worker+'/audit/'+job.jobId+'/stream',{headers:auth,signal});
    if(!response.ok||!response.body)throw new Error('The audit connection could not be opened.');
    const reader=response.body.getReader(),decoder=new TextDecoder();let buffer='';
    while(true){const chunk=await reader.read();if(chunk.done)break;buffer+=decoder.decode(chunk.value,{stream:true});let boundary:number;

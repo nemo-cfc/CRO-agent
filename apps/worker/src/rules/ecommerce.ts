@@ -140,6 +140,13 @@ function pick(ctx: RuleContext, role: 'product' | 'collection'): PageEvidence | 
   );
 }
 
+/** The first currency amount in a price string, e.g. "₹499" from "₹499₹64522%". */
+function firstPrice(text: string | null): string | null {
+  if (!text) return null;
+  const m = text.match(/(?:[$£€¥₹]|\bRs\.?|\bUSD|\bEUR|\bGBP|\bINR)\s?\d[\d,]*(?:\.\d{1,2})?/);
+  return m ? m[0] : text.slice(0, 30);
+}
+
 function productChecks(page: PageEvidence | null): Check[] {
   if (!page) {
     return [
@@ -164,6 +171,11 @@ function productChecks(page: PageEvidence | null): Check[] {
   const scanNote = scan ? `checked across ${scan.sections} page section${scan.sections === 1 ? '' : 's'}, hidden content and the page's product data` : null;
   const verifiedAbsence = { verified: scanned, method: 'full-page-scan', sections: scan?.sections ?? 0, url: page.finalUrl };
   const measured = { verified: true, method: 'measured', url: page.finalUrl, viewport: page.viewport };
+  if (scan && scan.isProductPage === false) {
+    out.push(skipped('ecommerce.productPage', 'ecommerce', 'Product page', `The page at ${page.finalUrl} did not look like a product page (no price, buy button or product data; it may redirect or be blocked), so nothing on it is reported as missing.`));
+  }
+  // Sale pages render "₹499₹645 22% off" as one string; quote the first price only.
+  const shownPrice = firstPrice(e.priceText);
 
   // ---- price ----
   const priceKnown = e.priceVisible || !!scan?.price;
@@ -176,9 +188,9 @@ function productChecks(page: PageEvidence | null): Check[] {
       weight: 2,
       scope: 'product',
       detail: e.priceAboveFold
-        ? `Price (${e.priceText}) is visible on arrival.`
+        ? `Price (${shownPrice}) is visible on arrival.`
         : e.priceVisible
-          ? `The price (${e.priceText}) is on the page but below the fold on a phone. Price is the first thing a shopper looks for; making them hunt for it adds doubt.`
+          ? `The price (${shownPrice}) is on the page but below the fold on a phone. Price is the first thing a shopper looks for; making them hunt for it adds doubt.`
           : priceKnown
             ? `The product has a price (${scan?.price}), but where it sits on screen could not be measured, so this is not scored.`
             : scanned

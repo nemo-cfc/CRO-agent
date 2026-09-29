@@ -389,6 +389,7 @@ export const ProductScanSchema = z.object({
   reviewCount: z.number().nullable(),
   rating: z.number().nullable(),
   reviewsEmpty: z.boolean(),
+  isProductPage: z.boolean().optional(),
 });
 export type ProductScan = z.infer<typeof ProductScanSchema>;
 

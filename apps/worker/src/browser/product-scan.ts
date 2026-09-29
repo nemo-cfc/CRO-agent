@@ -45,6 +45,8 @@ export interface ProductScan {
   rating: number | null;
   /** The review area explicitly says there are no reviews yet. */
   reviewsEmpty: boolean;
+  /** Structured product data, a Shopify product record, a buy control or a price was found. */
+  isProductPage: boolean;
 }
 
 const MAX_SECTIONS = 12;
@@ -113,7 +115,8 @@ export async function scanProductPage(
   const dom = await page.evaluate(readProductDom).catch(() => null);
   const scan: ProductScan = {
     policy: 'scan-v1',
-    completed: completed && !!dom,
+    // Absence claims need a real product page seen in more than one screen.
+    completed: completed && !!dom && dom.isProductPage && sections.length >= 2,
     sections: sections.length,
     pageHeight: geometry.height,
     elapsedMs: Date.now() - started,
@@ -126,7 +129,7 @@ function emptyDom(): Omit<ProductScan, 'policy' | 'completed' | 'sections' | 'pa
   return {
     textLength: 0, price: null, priceSource: null, available: null, buyControl: null, images: 0, imagesSource: null,
     video: false, shipping: null, returns: null, payment: [], stock: null, reviewsWidget: false, reviewCount: null,
-    rating: null, reviewsEmpty: false,
+    rating: null, reviewsEmpty: false, isProductPage: false,
   };
 }
 
@@ -168,6 +171,7 @@ async function readProductDom(): Promise<Omit<ProductScan, 'policy' | 'completed
   };
 
   // ---- structured product data (JSON-LD) ----
+  let ldProduct = false;
   let ldPrice: string | null = null;
   let ldAvailable: boolean | null = null;
   let ldImages = 0;
@@ -181,6 +185,7 @@ async function readProductDom(): Promise<Omit<ProductScan, 'policy' | 'completed
     const type = o['@type'];
     const types = Array.isArray(type) ? type : [type];
     if (!types.some((t) => t === 'Product' || t === 'ProductGroup')) return;
+    ldProduct = true;
     const offers = ([] as unknown[]).concat(o.offers ?? [], ...(Array.isArray(o.hasVariant) ? (o.hasVariant as Record<string, unknown>[]).map((v) => v.offers ?? []) : []));
     for (const off of offers.flat()) {
       if (!off || typeof off !== 'object') continue;
@@ -204,6 +209,7 @@ async function readProductDom(): Promise<Omit<ProductScan, 'policy' | 'completed
   }
 
   // ---- Shopify's own product record: images, price, availability ----
+  let shopRecord = false;
   let shopImages = 0;
   let shopPrice: string | null = null;
   let shopAvailable: boolean | null = null;
@@ -217,6 +223,7 @@ async function readProductDom(): Promise<Omit<ProductScan, 'policy' | 'completed
       clearTimeout(timer);
       if (res.ok && /json/i.test(res.headers.get('content-type') ?? '')) {
         const p = (await res.json()) as { images?: unknown[]; price?: number; available?: boolean; media?: { media_type?: string }[]; gift_card?: boolean };
+        shopRecord = true;
         shopImages = Array.isArray(p.images) ? p.images.length : 0;
         if (typeof p.price === 'number') shopPrice = (p.price / 100).toString();
         if (typeof p.available === 'boolean') shopAvailable = p.available;
@@ -276,11 +283,21 @@ async function readProductDom(): Promise<Omit<ProductScan, 'policy' | 'completed
   const payment = Array.from(new Set((text.match(PAYMENT) ?? []).map((p) => p.toLowerCase()))).slice(0, 8);
   const hasPaymentMarks = !!root.querySelector('shopify-payment-terms, shop-pay-installments-banner, klarna-placement, afterpay-placement, [class*="payment-terms" i], [class*="installment" i]');
   if (hasPaymentMarks && !payment.length) payment.push('instalment messaging');
+  // Express checkout buttons (Shop Pay, PayPal, Google Pay, Apple Pay) are
+  // payment options on the page even though their labels live in shadow DOM
+  // or iframes and often render after load. SKIMS showed a PayPal button that
+  // text matching alone missed.
+  const express = root.querySelector('shopify-accelerated-checkout, .shopify-payment-button, [data-shopify="payment-button"], shop-pay-wallet-button, [class*="paypal" i], iframe[src*="paypal"], [class*="gpay" i], [class*="apple-pay" i], [class*="additional-checkout" i]');
+  if (express && !payment.some((p) => /pay|paypal/.test(p))) payment.push('express checkout (Shop Pay / PayPal / wallets)');
 
   // The store's own product record is authoritative; the page's gallery is
   // the fallback when there is no such record.
   const images = shopImages > 0 ? shopImages : ldImages > 1 ? ldImages : Math.max(ldImages, galleryBases.size);
   return {
+    // A product page shows at least one sign of being one. A redirect to a
+    // "we have moved" notice or a blocked page has none, and must never be
+    // read as a product page with everything missing.
+    isProductPage: ldProduct || shopRecord || !!buyControl || !!priceText,
     textLength: text.length,
     price: ldPrice ?? (shopPrice ? `${shopPrice}` : null) ?? priceText,
     priceSource: ldPrice ? 'structured' : shopPrice ? 'shopify' : priceText ? 'text' : null,

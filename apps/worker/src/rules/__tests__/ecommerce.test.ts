@@ -190,6 +190,21 @@ describe('store checks', () => {
     expect(byId(checks, 'ecommerce.gallery').status).toBe('pass');
   });
 
+  it('makes no absence claims on a page that is not a product page', () => {
+    const ev = withRole('product', {
+      ecommerce: { ...page().ecommerce, priceAboveFold: false, priceVisible: false, priceText: null, addToCartAboveFold: false, addToCartText: null, shippingInfo: false, returnsInfo: false },
+      productScan: scan({ completed: false, isProductPage: false, sections: 1 }),
+    });
+    const checks = runRules(ev).checks;
+    for (const id of ['ecommerce.price', 'ecommerce.addToCart', 'ecommerce.deliveryTerms']) expect(byId(checks, id).status, id).toBe('na');
+    expect(byId(checks, 'ecommerce.productPage').detail).toMatch(/did not look like a product page/);
+  });
+
+  it('quotes only the first price of a sale price string', () => {
+    const ev = withRole('product', { ecommerce: { ...page().ecommerce, priceAboveFold: false, priceVisible: true, priceText: '₹499₹64522%' } });
+    expect(byId(runRules(ev).checks, 'ecommerce.price').detail).toContain('(₹499)');
+  });
+
   it('flags missing shipping and returns information once the full scan found none', () => {
     const ev = withRole('product', {
       ecommerce: { ...page().ecommerce, shippingInfo: false, returnsInfo: false },

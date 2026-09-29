@@ -13,13 +13,18 @@ const app = Fastify({
 
 await app.register(cors, { origin: true });
 
-app.get('/health', async () => ({
-  ok: true,
-  browser: pool.stats(),
-  queue: queueDepth(),
-  model: config.model,
-  hasApiKey: config.groqApiKey.length > 0,
-}));
+// Load balancers restart the worker on a non-2xx: without a working Chromium
+// every audit comes back empty, so a dead browser must fail the check.
+app.get('/health', async (_request, reply) => {
+  const ok = await pool.healthy();
+  return reply.code(ok ? 200 : 503).send({
+    ok,
+    browser: pool.stats(),
+    queue: queueDepth(),
+    model: config.model,
+    hasApiKey: config.groqApiKey.length > 0,
+  });
+});
 
 app.post('/audit', async (request, reply) => {
   const parsed = StartAuditRequestSchema.safeParse(request.body);

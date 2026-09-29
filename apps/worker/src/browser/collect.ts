@@ -1,4 +1,5 @@
 import { recheckProduct } from './product-verification.js';
+import { scanProductPage } from './product-scan.js';
 import { collectDuplicateScripts } from './duplicate-scripts.js';
 import { parseEventReceipt, repeatedEvents, type EventReceipt } from './duplicate-events.js';
 import { collectVisualObservations, stableVisualObservations } from './visual.js';
@@ -289,6 +290,11 @@ export async function collectPage(opts: CollectOptions): Promise<PageEvidence> {
 
     const productVerification = role === 'product' && !signal.aborted
       ? await recheckProduct(page, data, signal) : undefined;
+    // Whole-page evidence for the product page: every section screenshotted
+    // and the full product area read, so findings can be checked and
+    // "missing" claims only stand when the scan saw everything.
+    const fullScan = role === 'product' && opts.screenshot && !signal.aborted
+      ? await scanProductPage(page, signal).catch(() => null) : null;
     // The add-to-bag test runs in a separate, parallel session (probeOnly).
     const cartProbe: PageEvidence['cartProbe'] = undefined;
 
@@ -314,6 +320,8 @@ export async function collectPage(opts: CollectOptions): Promise<PageEvidence> {
       timing: { navMs, collectMs },
       ...data,
       productVerification,
+      productScan: fullScan?.scan,
+      sectionShots: fullScan?.sections,
       visualObservations,
       duplicateScripts,
       repeatedEvents: repeatedEvents(eventReceipts),

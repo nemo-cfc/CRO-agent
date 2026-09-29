@@ -1,6 +1,6 @@
 import type { Check, PageEvidence } from '@cro/shared';
 import { isStore } from '@cro/shared';
-import { check, skipped, type RuleContext } from './util.js';
+import { check, isUsablePage, skipped, type RuleContext } from './util.js';
 
 /**
  * Store-funnel checks. Every one is scoped to the page role where it is
@@ -134,8 +134,8 @@ export function cartChecks(probe: PageEvidence['cartProbe'] | null): Check[] {
 function pick(ctx: RuleContext, role: 'product' | 'collection'): PageEvidence | null {
   // Mobile first — it is where store traffic and store problems live.
   return (
-    ctx.evidence.pages.find((p) => p.role === role && p.viewport === 'mobile' && p.ok && !p.error) ??
-    ctx.evidence.pages.find((p) => p.role === role && p.ok && !p.error) ??
+    ctx.evidence.pages.find((p) => p.role === role && p.viewport === 'mobile' && isUsablePage(p)) ??
+    ctx.evidence.pages.find((p) => p.role === role && isUsablePage(p)) ??
     null
   );
 }
@@ -155,29 +155,47 @@ function productChecks(page: PageEvidence | null): Check[] {
   const e = page.ecommerce;
   const out: Check[] = [];
 
+  // The full-page scan (browser/product-scan.ts): every section scrolled and
+  // screenshotted, the whole product area read including hidden accordions,
+  // plus the page's structured data. A claim that something is ABSENT is only
+  // made when that scan completed; otherwise the check is "not measured".
+  const scan = page.productScan && page.productScan.policy === 'scan-v1' ? page.productScan : null;
+  const scanned = !!scan?.completed;
+  const scanNote = scan ? `checked across ${scan.sections} page section${scan.sections === 1 ? '' : 's'}, hidden content and the page's product data` : null;
+  const verifiedAbsence = { verified: scanned, method: 'full-page-scan', sections: scan?.sections ?? 0, url: page.finalUrl };
+  const measured = { verified: true, method: 'measured', url: page.finalUrl, viewport: page.viewport };
+
+  // ---- price ----
+  const priceKnown = e.priceVisible || !!scan?.price;
   out.push(
     check({
       id: 'ecommerce.price',
       category: 'ecommerce',
       title: 'Price is visible without scrolling',
-      status: e.priceAboveFold ? 'pass' : e.priceVisible ? 'warn' : 'na',
+      status: e.priceAboveFold ? 'pass' : e.priceVisible ? 'warn' : priceKnown ? 'na' : scanned ? 'fail' : 'na',
       weight: 2,
       scope: 'product',
       detail: e.priceAboveFold
         ? `Price (${e.priceText}) is visible on arrival.`
         : e.priceVisible
-          ? `The price (${e.priceText}) is on the page but below the fold. Price is the first thing a shopper looks for; making them hunt for it adds doubt.`
-          : 'The collector could not verify the product price. This is not evidence that the page has no price.',
-      evidence: { priceText: e.priceText, aboveFold: e.priceAboveFold, url: page.finalUrl, viewport: page.viewport, verification: JSON.stringify(page.productVerification ?? null) },
+          ? `The price (${e.priceText}) is on the page but below the fold on a phone. Price is the first thing a shopper looks for; making them hunt for it adds doubt.`
+          : priceKnown
+            ? `The product has a price (${scan?.price}), but where it sits on screen could not be measured, so this is not scored.`
+            : scanned
+              ? `No price was found on the product page (${scanNote}).`
+              : 'The price could not be checked on this visit, so this is not scored.',
+      evidence: e.priceVisible ? { ...measured, priceText: e.priceText, aboveFold: e.priceAboveFold } : { ...verifiedAbsence, verified: scanned && !priceKnown, price: scan?.price ?? null },
     }),
   );
 
+  // ---- buy button ----
+  const buyKnown = !!e.addToCartText || !!scan?.buyControl;
   out.push(
     check({
       id: 'ecommerce.addToCart',
       category: 'ecommerce',
       title: 'Add to cart is reachable on arrival',
-      status: e.addToCartAboveFold ? 'pass' : e.addToCartText ? 'warn' : 'na',
+      status: e.addToCartAboveFold ? 'pass' : e.addToCartText ? 'warn' : buyKnown || scan?.available === false ? 'na' : scanned ? 'fail' : 'na',
       weight: 2,
       scope: 'product',
       detail: e.addToCartAboveFold
@@ -185,15 +203,17 @@ function productChecks(page: PageEvidence | null): Check[] {
           ? `A sticky buy bar is on screen on arrival at 390px, so the buy action ("${e.addToCartText}") is reachable without scrolling.`
           : `"${e.addToCartText}" is visible above the fold at 390px.`
         : e.addToCartText
-          ? `"${e.addToCartText}" sits below the fold on mobile. On a product page the buy button should never require a scroll to find.`
-          : 'The collector could not verify the buy control. This is not evidence that the page has no buy button.',
-      evidence: {
-        text: e.addToCartText,
-        url: page.finalUrl, viewport: page.viewport, verification: JSON.stringify(page.productVerification ?? null),
-        aboveFold: e.addToCartAboveFold,
-        width: e.addToCartWidth,
-        height: e.addToCartHeight,
-      },
+          ? `"${e.addToCartText}" sits below the fold on a phone. On a product page the buy button should never require a scroll to find.`
+          : buyKnown
+            ? `The page has a buy control ("${scan?.buyControl}"), but its position on arrival could not be measured, so this is not scored.`
+            : scan?.available === false
+              ? 'This product is sold out, so the buy button is not checked.'
+              : scanned
+                ? `No add-to-cart or buy button was found on the product page (${scanNote}).`
+                : 'The buy button could not be checked on this visit, so this is not scored.',
+      evidence: e.addToCartText
+        ? { ...measured, text: e.addToCartText, aboveFold: e.addToCartAboveFold, width: e.addToCartWidth, height: e.addToCartHeight }
+        : { ...verifiedAbsence, verified: scanned && !buyKnown && scan?.available !== false, buyControl: scan?.buyControl ?? null },
     }),
   );
 
@@ -206,96 +226,114 @@ function productChecks(page: PageEvidence | null): Check[] {
           status: e.addToCartHeight >= 44 ? 'pass' : e.addToCartHeight >= 36 ? 'warn' : 'fail',
           scope: 'product',
           detail: `The buy button measures ${e.addToCartWidth}×${e.addToCartHeight}px on mobile. Below 44px tall it becomes a mis-tap risk on the single most valuable action in the store.`,
-          evidence: { width: e.addToCartWidth, height: e.addToCartHeight },
+          evidence: { ...measured, width: e.addToCartWidth, height: e.addToCartHeight },
         })
       : skipped('ecommerce.addToCartSize', 'ecommerce', 'Buy button is thumb-sized', 'No buy button to measure.'),
   );
 
+  // ---- reviews ----
+  const rating = e.ratingText || e.structuredRating || (scan?.rating ? `${scan.rating} / 5${scan.reviewCount ? ` from ${scan.reviewCount} reviews` : ''}` : null);
+  const noReviewsYet = !rating && !!scan?.reviewsEmpty;
+  const reviewArea = e.reviewWidget || !!scan?.reviewsWidget;
   out.push(
     check({
       id: 'ecommerce.socialProof',
       category: 'ecommerce',
       title: 'Product carries ratings or reviews',
-      // Three sources, any of which proves reviews exist: text on the page at
-      // load, text after the page was scrolled, or the product's structured
-      // data. A widget with nothing readable is "could not tell", never "empty".
-      status: e.ratingText || e.structuredRating ? 'pass' : e.reviewWidget ? 'na' : 'fail',
+      status: rating ? 'pass' : noReviewsYet ? 'warn' : reviewArea ? 'na' : scanned ? 'fail' : 'na',
       weight: 1.5,
       scope: 'product',
-      detail:
-        e.ratingText || e.structuredRating
-          ? `Reviews present (${e.ratingText ?? e.structuredRating}${!e.ratingText && e.structuredRating ? ', from the page\'s product data' : ''}).`
-          : e.reviewWidget
-            ? 'A review section is on the page but no rating could be read during this visit (review apps often load late), so this is not scored.'
-            : 'No reviews or ratings were found on the product page: none on screen after scrolling, and none in the page\'s product data. For an unfamiliar brand this is often a major source of hesitation.',
-      evidence: { widget: e.reviewWidget, rating: e.ratingText, structuredRating: e.structuredRating },
+      detail: rating
+        ? `Reviews present (${rating}).`
+        : noReviewsYet
+          ? 'The product page has a reviews section, but it shows no reviews yet ("be the first to review"). A product without reviews asks first-time shoppers to take it on trust.'
+          : reviewArea
+            ? 'A review section is on the page but no rating could be read during this visit, so this is not scored.'
+            : scanned
+              ? `No reviews or ratings were found on the product page (${scanNote}).`
+              : 'Reviews could not be checked on this visit, so this is not scored.',
+      evidence: { ...verifiedAbsence, verified: scanned && !rating && (noReviewsYet || !reviewArea), widget: reviewArea, rating, reviewsEmpty: noReviewsYet },
     }),
   );
 
+  // ---- images: count every photo, not only the one visible in a carousel ----
+  // The scan's count (store product data first) is authoritative when it has one.
+  const images = scan && scan.images > 0 ? scan.images : e.galleryImages;
   out.push(
     check({
       id: 'ecommerce.gallery',
       category: 'ecommerce',
       title: 'Product is shown from more than one angle',
-      status: e.galleryImages >= 4 ? 'pass' : e.galleryImages >= 2 ? 'warn' : 'fail',
+      status: images >= 4 ? 'pass' : !scanned ? 'na' : images >= 2 ? 'warn' : 'fail',
       scope: 'product',
-      detail:
-        e.galleryImages >= 2
-          ? `${e.galleryImages} product images detected.`
-          : `Only ${e.galleryImages} product image detected. Shoppers cannot handle the item, so images are doing the work of the shop floor.`,
-      evidence: { images: e.galleryImages },
+      detail: images >= 4
+        ? `${images} product images${scan?.video ? ' and a video' : ''}.`
+        : scanned
+          ? `Only ${images} product image${images === 1 ? '' : 's'} (${scanNote}). Shoppers cannot handle the item, so photos have to answer their questions.`
+          : 'The product photos could not all be counted on this visit, so this is not scored.',
+      evidence: { ...verifiedAbsence, images, source: scan?.imagesSource ?? 'gallery', video: !!scan?.video },
     }),
   );
 
+  // ---- availability ----
+  const stock = e.stockText || scan?.stock || null;
   out.push(
     check({
       id: 'ecommerce.stock',
       category: 'ecommerce',
       title: 'Availability is stated',
-      status: e.stockText ? 'pass' : 'warn',
+      status: stock ? 'pass' : scanned ? 'warn' : 'na',
       weight: 0.75,
       scope: 'product',
-      detail: e.stockText
-        ? `Availability shown as "${e.stockText}".`
-        : 'No stock or availability wording found. Saying an item is in stock removes a small doubt at no cost; scarcity wording removes hesitation where it is genuinely true.',
-      evidence: { stockText: e.stockText },
+      detail: stock
+        ? `Availability shown as "${stock}".`
+        : scanned
+          ? `No stock or availability wording on the product page (${scanNote}). Saying an item is in stock removes a small doubt at no cost.`
+          : 'Availability wording could not be checked on this visit, so this is not scored.',
+      evidence: { ...verifiedAbsence, stockText: stock },
     }),
   );
 
+  // ---- shipping and returns, including closed accordions ----
+  const shipping = e.shippingInfo || !!scan?.shipping;
+  const returns = e.returnsInfo || !!scan?.returns;
   out.push(
     check({
       id: 'ecommerce.deliveryTerms',
       category: 'ecommerce',
       title: 'Shipping and returns are answered on the page',
-      // A site-wide shipping banner states the terms, just not at the point
-      // of decision: at most a warning, and never described as "missing".
-      status: e.shippingInfo && e.returnsInfo ? 'pass' : e.shippingInfo || e.returnsInfo || e.shippingBanner ? 'warn' : 'fail',
+      status: shipping && returns ? 'pass' : !scanned ? 'na' : shipping || returns || e.shippingBanner ? 'warn' : 'fail',
       weight: 1.5,
       scope: 'product',
-      detail:
-        e.shippingInfo && e.returnsInfo
-          ? 'Both shipping and returns information appear on the product page.'
+      detail: shipping && returns
+        ? `Shipping and returns are both covered on the product page${scan?.shipping && scan?.returns ? ` ("${scan.shipping}", "${scan.returns}")` : ''}.`
+        : !scanned
+          ? 'Shipping and returns could not be fully checked on this visit, so this is not scored.'
           : [
-              !e.shippingInfo && e.shippingBanner ? 'Shipping terms appear only in the site-wide banner, not next to the buy button.' : !e.shippingInfo ? 'No shipping or delivery information on the product page.' : '',
-              !e.returnsInfo ? 'No returns information on the product page.' : '',
+              !shipping && e.shippingBanner ? 'Shipping terms appear only in the site-wide banner, not on the product page itself.' : !shipping ? 'No shipping or delivery information on the product page.' : '',
+              !returns ? 'No returns or exchange information on the product page.' : '',
+              `(${scanNote}).`,
             ].filter(Boolean).join(' '),
-      evidence: { shipping: e.shippingInfo, shippingBanner: !!e.shippingBanner, returns: e.returnsInfo },
+      evidence: { ...verifiedAbsence, shipping: scan?.shipping ?? (e.shippingInfo ? 'yes' : null), returns: scan?.returns ?? (e.returnsInfo ? 'yes' : null), shippingBanner: !!e.shippingBanner },
     }),
   );
 
+  // ---- payment options ----
+  const paymentShown = e.paymentIcons >= 2 || (scan?.payment.length ?? 0) > 0;
   out.push(
     check({
       id: 'ecommerce.paymentTrust',
       category: 'ecommerce',
       title: 'Accepted payment methods are shown',
-      status: e.paymentIcons >= 2 ? 'pass' : e.paymentIcons === 1 ? 'warn' : 'warn',
+      status: paymentShown ? 'pass' : scanned ? 'warn' : 'na',
       weight: 0.75,
       scope: 'product',
-      detail:
-        e.paymentIcons >= 2
-          ? `${e.paymentIcons} payment method marks shown.`
-          : 'No payment method marks near the buy action. Recognisable payment logos are cheap reassurance for a shopper who has not bought from you before.',
-      evidence: { icons: e.paymentIcons },
+      detail: paymentShown
+        ? `Payment options are shown${scan?.payment.length ? ` (${scan.payment.join(', ')})` : ` (${e.paymentIcons} payment marks)`}.`
+        : scanned
+          ? `No payment options (cards, UPI, COD, pay-later) are mentioned on the product page (${scanNote}).`
+          : 'Payment options could not be checked on this visit, so this is not scored.',
+      evidence: { ...verifiedAbsence, icons: e.paymentIcons, payment: scan?.payment.join(', ') ?? '' },
     }),
   );
 

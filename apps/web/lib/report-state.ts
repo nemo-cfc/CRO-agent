@@ -18,6 +18,8 @@ export interface ReportState {
   checks: Check[];
   scorecard: Scorecard | null;
   shots: Shot[];
+  /** Whole-page section screenshots of the product page, for verification. */
+  sections?: { role: PageRole; url: string; shots: { index: number; y: number; dataUri: string }[] }[];
   summary: string | null;
   recommendations: Recommendation[];
   notes: string[];
@@ -69,6 +71,11 @@ export function reduce(s: ReportState, e: AuditEvent): ReportState {
           ...s.shots.filter((x) => !(x.role === e.role && x.viewport === e.viewport)),
           { role: e.role, viewport: e.viewport, url: e.url, dataUri: e.dataUri },
         ],
+      };
+    case 'sections':
+      return {
+        ...s,
+        sections: [...(s.sections ?? []).filter((x) => x.url !== e.url), { role: e.role, url: e.url, shots: e.shots }],
       };
     case 'summary':
       return { ...s, summary: e.text };

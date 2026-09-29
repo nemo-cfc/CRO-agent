@@ -168,7 +168,9 @@ const META: Record<string, Meta> = {
     why: 'If the buy button is out of sight, ready-to-buy shoppers have to go looking for it.',
     fix: 'Bring the size choice and buy button onto the first phone screen, or add a buy bar that stays at the bottom of the screen.' } },
   'ecommerce.socialProof': { cohort: 'buyConfidence', impact: 5, plain: {
-    found: () => 'The product page shows no star ratings or customer reviews.',
+    found: (c) => (c.evidence.reviewsEmpty
+      ? 'The product page has a reviews section, but it shows no reviews yet ("be the first to review").'
+      : 'The product page shows no star ratings or customer reviews.'),
     why: 'Reviews from other buyers are one of the main things first-time shoppers use to decide whether to trust a store.',
     fix: 'Add a reviews app and show the star rating near the product name.' } },
   'ecommerce.gallery': { cohort: 'buyConfidence', impact: 3, plain: {

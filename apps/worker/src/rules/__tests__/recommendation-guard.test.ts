@@ -18,9 +18,15 @@ const candidate: Recommendation = {
 };
 
 describe('recommendation guard', () => {
-  it('rejects model advice based on unverified rule checks', () => {
-    const rec = groundedRecommendation(candidate, [rule('cta.tapTarget')])!;
-    expect(rec).toBeNull();
+  it('accepts advice grounded in a measured check', () => {
+    expect(groundedRecommendation(candidate, [rule('cta.tapTarget')])).not.toBeNull();
+  });
+
+  it('rejects model advice based on an unverified "missing" claim', () => {
+    const claim = { ...candidate, evidence_refs: ['ecommerce.stock'] };
+    expect(groundedRecommendation(claim, [rule('ecommerce.stock', 'warn')])).toBeNull();
+    const verified = { ...rule('ecommerce.stock', 'warn'), evidence: { verified: true } };
+    expect(groundedRecommendation(claim, [verified])).not.toBeNull();
   });
 
   it('rejects unknown and passing checks, and empty citations', () => {

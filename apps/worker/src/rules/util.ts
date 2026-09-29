@@ -11,6 +11,17 @@ export interface RuleContext {
   home: PageEvidence | null;
 }
 
+/**
+ * A store page (product, collection) the store rules may read: it loaded, and
+ * any error is only the "still loading, audited as rendered" note heavy stores
+ * get while third-party scripts finish. Dropping those pages silently skipped
+ * every product check; the product page is backed by its own full-page scan.
+ * Homepage conclusions still require a finished page (buildContext below).
+ */
+export function isUsablePage(p: { ok: boolean; error: string | null }): boolean {
+  return p.ok && (!p.error || /^Still loading after/.test(p.error));
+}
+
 export function buildContext(evidence: AuditEvidence): RuleContext {
   const find = (role: string, vp: string) =>
     evidence.pages.find((p) => p.role === role && p.viewport === vp && p.ok && !p.error) ?? null;

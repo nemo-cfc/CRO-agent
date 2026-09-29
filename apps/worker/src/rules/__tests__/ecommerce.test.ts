@@ -11,6 +11,16 @@ const byId = (checks: Check[], id: string): Check => {
 };
 
 /** Replace one role's pages with a perturbed variant, keeping the rest healthy. */
+/** A completed full-page scan that found nothing, unless overridden. */
+function scan(overrides: Partial<NonNullable<PageEvidence['productScan']>> = {}): NonNullable<PageEvidence['productScan']> {
+  return {
+    policy: 'scan-v1', completed: true, sections: 6, pageHeight: 4000, elapsedMs: 2000, textLength: 3000,
+    price: null, priceSource: null, available: null, buyControl: null, images: 0, imagesSource: null, video: false,
+    shipping: null, returns: null, payment: [], stock: null, reviewsWidget: false, reviewCount: null, rating: null, reviewsEmpty: false,
+    ...overrides,
+  };
+}
+
 function withRole(role: PageEvidence['role'], overrides: Partial<PageEvidence>) {
   const base = healthyStoreEvidence();
   return {
@@ -139,16 +149,51 @@ describe('store checks', () => {
     expect(byId(runRules(ev).checks, 'ecommerce.price').status).toBe('na');
   });
 
-  it('fails a product page with no reviews', () => {
+  it('fails a product page with no reviews once the full scan found none', () => {
     const ev = withRole('product', {
       ecommerce: { ...page().ecommerce, reviewWidget: false, ratingText: null },
+      productScan: scan(),
     });
-    expect(byId(runRules(ev).checks, 'ecommerce.socialProof').status).toBe('fail');
+    const c = byId(runRules(ev).checks, 'ecommerce.socialProof');
+    expect(c.status).toBe('fail');
+    expect(c.evidence.verified).toBe(true);
   });
 
-  it('flags missing shipping and returns information', () => {
+  it('calls an empty reviews section what it is, a verified warning', () => {
+    const ev = withRole('product', {
+      ecommerce: { ...page().ecommerce, reviewWidget: true, ratingText: null },
+      productScan: scan({ reviewsWidget: true, reviewsEmpty: true, reviewCount: 0 }),
+    });
+    const c = byId(runRules(ev).checks, 'ecommerce.socialProof');
+    expect(c.status).toBe('warn');
+    expect(c.evidence.verified).toBe(true);
+    expect(c.detail).toMatch(/no reviews yet/);
+  });
+
+  it('makes no absence claim without a completed full-page scan', () => {
+    const ev = withRole('product', {
+      ecommerce: { ...page().ecommerce, reviewWidget: false, ratingText: null, shippingInfo: false, returnsInfo: false, stockText: null, paymentIcons: 0, galleryImages: 1 },
+    });
+    const checks = runRules(ev).checks;
+    for (const id of ['ecommerce.socialProof', 'ecommerce.deliveryTerms', 'ecommerce.stock', 'ecommerce.paymentTrust', 'ecommerce.gallery']) {
+      expect(byId(checks, id).status, id).toBe('na');
+    }
+  });
+
+  it('counts shipping and returns found in closed accordions, and every carousel photo', () => {
+    const ev = withRole('product', {
+      ecommerce: { ...page().ecommerce, shippingInfo: false, returnsInfo: false, galleryImages: 1 },
+      productScan: scan({ shipping: 'FREE Shipping on prepaid orders', returns: 'Easy Exchanges', images: 8, imagesSource: 'shopify' }),
+    });
+    const checks = runRules(ev).checks;
+    expect(byId(checks, 'ecommerce.deliveryTerms').status).toBe('pass');
+    expect(byId(checks, 'ecommerce.gallery').status).toBe('pass');
+  });
+
+  it('flags missing shipping and returns information once the full scan found none', () => {
     const ev = withRole('product', {
       ecommerce: { ...page().ecommerce, shippingInfo: false, returnsInfo: false },
+      productScan: scan(),
     });
     expect(byId(runRules(ev).checks, 'ecommerce.deliveryTerms').status).toBe('fail');
   });
@@ -156,6 +201,7 @@ describe('store checks', () => {
   it('does not call shipping missing when a site-wide banner states it', () => {
     const ev = withRole('product', {
       ecommerce: { ...page().ecommerce, shippingInfo: false, shippingBanner: true, returnsInfo: false },
+      productScan: scan(),
     });
     const c = byId(runRules(ev).checks, 'ecommerce.deliveryTerms');
     expect(c.status).toBe('warn');

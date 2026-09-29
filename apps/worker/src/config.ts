@@ -14,6 +14,8 @@ function int(name: string, fallback: number): number {
 export const config = {
   port: int('PORT', 8787),
   host: process.env.HOST ?? '0.0.0.0',
+  /** Shared secret the web app sends as a Bearer token. Unset: no check (local dev). */
+  workerToken: process.env.WORKER_TOKEN ?? '',
 
   /** Pre-warmed BrowserContexts held open. Each audit borrows up to 4. */
   poolSize: int('POOL_SIZE', 8),

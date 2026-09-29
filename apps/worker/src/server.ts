@@ -1,5 +1,6 @@
 import Fastify from 'fastify';
 import cors from '@fastify/cors';
+import { timingSafeEqual } from 'node:crypto';
 import { StartAuditRequestSchema } from '@cro/shared';
 import { config } from './config.js';
 import { pool } from './browser/pool.js';
@@ -12,6 +13,17 @@ const app = Fastify({
 });
 
 await app.register(cors, { origin: true });
+
+// A hosted worker browses whatever URL it is given, so only the web app may
+// start or read audits. /health stays open for the host's health check.
+const expectedAuth = config.workerToken ? Buffer.from('Bearer ' + config.workerToken) : null;
+app.addHook('onRequest', async (request, reply) => {
+  if (!expectedAuth || request.url === '/health' || request.method === 'OPTIONS') return;
+  const given = Buffer.from(request.headers.authorization ?? '');
+  if (given.length !== expectedAuth.length || !timingSafeEqual(given, expectedAuth)) {
+    return reply.code(401).send({ error: 'Unauthorized.' });
+  }
+});
 
 // Load balancers restart the worker on a non-2xx: without a working Chromium
 // every audit comes back empty, so a dead browser must fail the check.

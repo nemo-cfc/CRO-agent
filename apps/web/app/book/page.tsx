@@ -2,12 +2,25 @@ import '../report.css';
 
 export const metadata = { title: 'Book your full CRO audit | Monkeyman', robots: { index: false, follow: false } };
 
+/** Calendly event for full-audit calls; NEXT_PUBLIC_CALENDLY_URL overrides it per deployment. */
+const CALENDLY_URL = process.env.NEXT_PUBLIC_CALENDLY_URL || 'https://calendly.com/aayushi-k-appwrk/30min';
+
+/** Inline-embed form of the event link, themed to the page (colours apply on paid Calendly plans). */
+function calendlyEmbed(url: string) {
+  const embed = new URL(url);
+  embed.searchParams.set('embed_type', 'Inline');
+  embed.searchParams.set('hide_gdpr_banner', '1');
+  embed.searchParams.set('background_color', '1d1815');
+  embed.searchParams.set('text_color', 'f4efe6');
+  embed.searchParams.set('primary_color', 'd67a3a');
+  return embed.toString();
+}
+
 /**
  * Booking page reached from the report's "Book a full audit" buttons and the
- * unlock pop-up. Embeds the scheduling calendar when one is configured.
+ * unlock pop-up. Embeds the Calendly scheduler inline.
  */
 export default function BookPage() {
-  const calendar = process.env.NEXT_PUBLIC_ZOHO_CALENDAR_URL;
   return (
     <div className="rp">
       <header className="rp-bar">
@@ -22,15 +35,7 @@ export default function BookPage() {
             <p className="rp-meta">A specialist walks through your checkout, tracking, product pages and navigation, then hands you a prioritised roadmap. The call is free and there is no obligation.</p>
           </div>
         </section>
-        {calendar ? (
-          <iframe className="rp-calendar" src={calendar} title="Book a full CRO audit" loading="eager" />
-        ) : (
-          <section className="rp-section rp-calendar-missing">
-            <h2>Calendar coming soon</h2>
-            <p className="rp-lede">Online booking is not set up yet. Email us and we will send you a few times that work.</p>
-            <a className="rp-btn" href="mailto:hello@monkeyman.agency?subject=Book%20a%20full%20CRO%20audit">Email to book a full audit</a>
-          </section>
-        )}
+        <iframe className="rp-calendar" src={calendlyEmbed(CALENDLY_URL)} title="Book a full CRO audit" loading="eager" />
       </main>
     </div>
   );

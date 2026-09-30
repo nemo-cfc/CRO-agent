@@ -2,6 +2,7 @@
 
 import { FormEvent, useEffect, useRef, useState } from 'react';
 import { displayHost, displayLink, parseStoreLink, sameStore } from '@/lib/store-link';
+import { captureAttribution, sendStoreLead } from '@/lib/zoho-paid-lead';
 
 type Job = { id: string; status: 'running' | 'done' | 'error'; reportUrl?: string | null; error?: string };
 type Match = { title: string; url: string; image: string | null; price: string | null; available: boolean | null };
@@ -29,6 +30,9 @@ export function AuditStartForm() {
   const storeRef = useRef<HTMLInputElement>(null);
   const queryRef = useRef<HTMLInputElement>(null);
   const requestId = useRef(0);
+
+  // Keep the ad click (UTMs, gclid) for the CRM record.
+  useEffect(() => { captureAttribution(); }, []);
 
   // Poll the running audit.
   useEffect(() => {
@@ -103,6 +107,8 @@ export function AuditStartForm() {
     setError('');
     setStore(parsed.store);
     setStoreInput(displayHost(parsed.store));
+    // Reaches the CRM even if the visitor goes no further.
+    sendStoreLead(parsed.store.toString());
     // A pasted product link already names the product: start straight away.
     if (parsed.kind === 'product') {
       setPicked({ title: displayLink(parsed.url), url: parsed.url.toString(), image: null, price: null, available: null });

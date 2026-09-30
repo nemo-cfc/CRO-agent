@@ -47,7 +47,21 @@ AUDIT_RATE_WINDOW_MS=3600000
 AUDIT_DUPLICATE_WINDOW_MS=1800000
 # Optional; defaults to the Monkeyman 30-minute call. Build-time.
 NEXT_PUBLIC_CALENDLY_URL=
+# Zoho CRM paid leads (build-time). Both values come from the embed code of the
+# "Monkeyman.agency - Paid LP Leads" webform, the one the /la/ pages use.
+NEXT_PUBLIC_ZOHO_PAID_FORM_ID=<xnQsjsdp from the embed code>
+NEXT_PUBLIC_ZOHO_PAID_FORM_KEY=<xmIwtLD from the embed code>
+NEXT_PUBLIC_ZOHO_ALLOWED_HOSTS=audit.<domain>
 ```
+
+### Leads in Zoho
+
+Every audit sends leads to the `monkeyman_paid_leads` module, beside the /la/ landing pages' leads:
+
+- **When a visitor enters their store**, a record with the store URL, landing page, UTMs and Google Ads click id. They have not given contact details yet, so the name is `CRO audit – <store>` and the email is `<store>@cro-audit.invalid`, a reserved domain that never receives mail. What's Ready carries `[Stage: store entered, no contact details]`.
+- **When they unlock the report**, a second record with their name, email, phone, their answers, the report id and the checks the audit failed, tagged `[Stage: report unlocked]`.
+
+Leads are sent only from the hosts in `NEXT_PUBLIC_ZOHO_ALLOWED_HOSTS`, and only when both webform values are set; anywhere else the browser console logs what would have been sent. If the webform is edited in Zoho, re-copy both values and rebuild, or Zoho silently drops every lead. If Zoho rejects the placeholder email, check the module's field rules with the Zoho admin.
 
 `TRUST_PROXY=true` (the default) makes the per-IP audit limit read the shopper's address from Caddy's `X-Forwarded-For`. Keep the app behind the proxy: reached directly, a shopper could set that header themselves and dodge the limit.
 
@@ -98,10 +112,11 @@ The worker needs no public address now: the web app reaches it on `127.0.0.1:878
 ## 5. Verify
 
 1. `https://audit.<domain>/` loads the landing page; `/book` shows the Calendly scheduler.
-2. Run an audit from the landing page. Expect the "Live CRO audit in progress" overlay, then the unlock form.
-3. Unlock the report; it should list findings with screenshots.
-4. Click "Download PDF"; expect a PDF of the report.
-5. `ls apps/web/data/reports` shows the new report.
+2. Enter a store, then check Zoho for a `CRO audit – <store>` record in `monkeyman_paid_leads`. Delete test records afterwards.
+3. Run an audit from the landing page. Expect the "Live CRO audit in progress" overlay, then the unlock form.
+4. Unlock the report; it should list findings with screenshots, and Zoho should get a second record with your details.
+5. Click "Download PDF"; expect a PDF of the report.
+6. `ls apps/web/data/reports` shows the new report.
 
 ## Updating
 

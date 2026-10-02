@@ -21,6 +21,14 @@ export const config = {
   poolSize: int('POOL_SIZE', 8),
   maxConcurrentAudits: int('MAX_CONCURRENT_AUDITS', 2),
   maxQueueDepth: int('MAX_QUEUE_DEPTH', 8),
+  /**
+   * Page loads an audit runs at once (0 = all of them). A small server
+   * starved for CPU times out every page when all five start together;
+   * 2 at a time lets each one finish.
+   */
+  pageConcurrency: int('PAGE_CONCURRENCY', 0),
+  /** Pixel density of the phone viewport. 3 matches an iPhone but costs 2.25x the rendering of 2. */
+  mobileScale: int('MOBILE_SCALE', 2),
 
   /**
    * Hard wall for the whole pipeline. Deliberately below the 30s product

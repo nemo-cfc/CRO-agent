@@ -124,13 +124,15 @@ apps/web/              Next.js frontend, SSE consumer
 |---|---|---|
 | `GROQ_API_KEY` | — | Required for written recommendations |
 | `CRUX_API_KEY` | — | Optional; enables real-user performance data |
-| `AUDIT_DEADLINE_MS` | `20000` | Measurement stops here. Use `35000` on a hosted worker |
-| `WRITE_DEADLINE_MS` | `28000` | Write-up deadline, from the audit start. Use `45000` on a hosted worker |
+| `AUDIT_DEADLINE_MS` | `20000` | Measurement stops here. Use `90000` on a small hosted worker |
+| `WRITE_DEADLINE_MS` | `28000` | Write-up deadline, from the audit start. Use `110000` on a small hosted worker |
+| `PAGE_CONCURRENCY` | `0` (all) | Page loads run at once per audit. Use `2` on a small hosted worker |
+| `MOBILE_SCALE` | `2` | Pixel density of the phone viewport |
 | `POOL_SIZE` | `8` | Pre-warmed contexts; each audit borrows 4 |
 | `MAX_CONCURRENT_AUDITS` | `2` | Beyond this, requests queue |
 | `CRO_MODEL` | `openai/gpt-oss-120b` | |
 | `CRO_EFFORT` | `low` | Latency lever — sweep `low` → `medium` with the bench |
-| `NAV_TIMEOUT_MS` | `12000` | Per-page navigation budget. Use `20000` on a hosted worker |
+| `NAV_TIMEOUT_MS` | `12000` | Per-page navigation budget. Use `30000` on a small hosted worker |
 
 **Health check.** `GET /health` returns 503 when Chromium is not running and cannot be relaunched within 10s. Point the host's health check (AWS target group or ECS container check) at it, so a worker without a browser is restarted instead of returning empty audits.
 

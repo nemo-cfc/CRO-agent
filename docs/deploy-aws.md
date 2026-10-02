@@ -8,18 +8,18 @@ Shopper ──> Vercel (apps/web) ──WORKER_URL + WORKER_TOKEN──> AWS (ap
                  └── Vercel Blob (reports, leads, grants)
 ```
 
-The recommended setup is **one small always-on server running the worker's Docker image**, for about **$12–15 a month**. It is sized for the expected load, audits from ad traffic, planned for up to 25 a day. One audit takes about 45 seconds, so even 25 arriving in the same hour finish without queuing for long. Section 6 covers when to move to something bigger.
+The recommended setup is **one small always-on server running the worker's Docker image**, for about **$12–15 a month**. It is sized for the expected load, audits from ad traffic, planned for up to 25 a day. On this server one audit takes about 60 seconds, so even 25 arriving in the same hour finish without queuing for long. Section 6 covers when to move to something bigger.
 
 ## Why an always-on server, not Lambda
 
-The worker keeps one Chromium running and reuses it across audits. Each audit opens 3 pages on a phone and a desktop viewport, inside a deadline of about 35 seconds.
+The worker keeps one Chromium running and reuses it across audits. Each audit opens 3 pages on a phone and a desktop viewport, inside a measurement deadline of 90 seconds on a small server.
 
 On a serverless function (Lambda, or a Vercel function), Chromium starts cold on every request and gets a small, capped amount of memory. Pages then fail to render. The worker falls back to raw-HTML checks, none of which the report publishes, and the shopper gets an empty report. That is what happened to the motoradds.com audit on 29 September 2026.
 
 ## Constraints you must respect
 
 1. **Run exactly one worker.** Job state lives in memory. The web app starts an audit with `POST /audit`, then reads `GET /audit/:id/stream`. Both requests must reach the same process. Scale *up* (a bigger server), not *out*, until job state moves to Redis.
-2. **The stream is long-lived.** `/audit/:id/stream` is server-sent events and stays open for the whole audit (up to about 45 seconds). Any proxy in front must not buffer it, and must allow at least 120 seconds.
+2. **The stream is long-lived.** `/audit/:id/stream` is server-sent events and stays open for the whole audit (about 60 seconds, at most 110). Any proxy in front must not buffer it, and must allow at least 120 seconds.
 3. **Set `WORKER_TOKEN`.** Without it, anyone who finds the worker's address can make it browse arbitrary sites on your bill.
 
 ## 1. Server and settings
@@ -31,9 +31,11 @@ On a serverless function (Lambda, or a Vercel function), Chromium starts cold on
 | `POOL_SIZE` | `2` | `4` |
 | `MAX_CONCURRENT_AUDITS` | `1` | `2` |
 | `MAX_QUEUE_DEPTH` | `4` | `8` |
-| Capacity | ~80 audits an hour; later ones wait in the queue | ~150 an hour |
+| `PAGE_CONCURRENCY` | `2` | `3` |
+| `MOBILE_SCALE` | `2` | `2` |
+| Capacity | ~50 audits an hour; later ones wait in the queue | ~100 an hour |
 
-The code defaults (`POOL_SIZE=8`, 2 concurrent audits) are sized for a development machine with plenty of memory. On a 2 GB server they would exhaust memory, so set the values above.
+The code defaults (`POOL_SIZE=8`, 2 concurrent audits, all page loads at once, 20-second deadline) are sized for a development machine with plenty of CPU and memory. On a 2 GB server they make every report partial ("still loading" / "did not load in time"): five page loads start together, starve each other of CPU, and run out of time. `PAGE_CONCURRENCY=2` loads two pages at a time, most important first, and the longer deadlines below give each one room to finish. Tested on a single CPU core: two stores audited in full in 52–58 seconds, with every screenshot.
 
 Add a 2 GB swap file on the server (step 3.2). It keeps a memory spike on a heavy product page from killing Chromium, at the cost of that one audit running slower.
 
@@ -84,9 +86,11 @@ WORKER_TOKEN=<long random string>
 POOL_SIZE=2
 MAX_CONCURRENT_AUDITS=1
 MAX_QUEUE_DEPTH=4
-AUDIT_DEADLINE_MS=35000
-NAV_TIMEOUT_MS=20000
-WRITE_DEADLINE_MS=45000
+PAGE_CONCURRENCY=2
+MOBILE_SCALE=2
+AUDIT_DEADLINE_MS=90000
+NAV_TIMEOUT_MS=30000
+WRITE_DEADLINE_MS=110000
 ```
 
 Generate the token with `openssl rand -hex 32`. Then make the file readable only by root:
@@ -97,7 +101,7 @@ sudo chmod 600 /etc/cro-worker.env
 
 Do **not** set `AWS_LAMBDA_FUNCTION_NAME` or `VERCEL`. Either one switches the worker to the serverless Chromium build, which is not in the image. `PORT` (8787) and `HOST` (0.0.0.0) are already set in the image.
 
-The web app waits up to 150 seconds for an audit (`apps/web/app/api/reports/route.ts`), so these deadlines leave plenty of room.
+The web app waits up to 150 seconds for an audit (`apps/web/app/api/reports/route.ts`), so these deadlines fit inside it. Keep `WRITE_DEADLINE_MS` below 140000.
 
 ### 3.4 Run the worker
 
@@ -117,10 +121,10 @@ echo '* * * * * root [ "$(docker inspect -f {{.State.Health.Status}} cro-worker)
 
 ### 3.6 HTTPS with Caddy (free certificates)
 
-Point a DNS record, for example `worker.<your-domain>`, at the server's static IP. Install Caddy (`sudo apt install caddy`), then set `/etc/caddy/Caddyfile` to:
+Point a DNS record, for example `cro-worker.monkeyman.agency`, at the server's static IP. In Cloudflare, set the record to **DNS only** (grey cloud), so Caddy can obtain its certificate and the progress stream is not cut by Cloudflare's proxy. Install Caddy (`sudo apt install caddy`), then set `/etc/caddy/Caddyfile` to:
 
 ```
-worker.<your-domain> {
+cro-worker.monkeyman.agency {
 	reverse_proxy 127.0.0.1:8787 {
 		flush_interval -1
 	}
@@ -138,7 +142,7 @@ Caddy obtains and renews a Let's Encrypt certificate automatically. `flush_inter
 In Vercel → Project → Settings → Environment Variables (Production), set both:
 
 ```
-WORKER_URL=https://worker.<your-domain>
+WORKER_URL=https://cro-worker.monkeyman.agency
 WORKER_TOKEN=<the same token as on the server>
 ```
 
@@ -149,25 +153,25 @@ Then redeploy the web app. Without `WORKER_URL`, every audit fails with "fetch f
 1. **Health.** Expect HTTP 200 and `"browser":{"connected":true,...}`. A 503 means Chromium could not start (see Troubleshooting).
 
    ```bash
-   curl -s -w "\nHTTP %{http_code}\n" https://worker.<your-domain>/health
+   curl -s -w "\nHTTP %{http_code}\n" https://cro-worker.monkeyman.agency/health
    ```
 
 2. **The token is enforced.** Expect `401`:
 
    ```bash
-   curl -s -o /dev/null -w "%{http_code}\n" -X POST https://worker.<your-domain>/audit -H "Content-Type: application/json" -d '{"url":"https://motoradds.com/"}'
+   curl -s -o /dev/null -w "%{http_code}\n" -X POST https://cro-worker.monkeyman.agency/audit -H "Content-Type: application/json" -d '{"url":"https://motoradds.com/"}'
    ```
 
 3. **One real audit through the worker.**
 
    ```bash
-   curl -s -X POST https://worker.<your-domain>/audit -H "Authorization: Bearer <token>" -H "Content-Type: application/json" -d '{"url":"https://motoradds.com/"}'
+   curl -s -X POST https://cro-worker.monkeyman.agency/audit -H "Authorization: Bearer <token>" -H "Content-Type: application/json" -d '{"url":"https://motoradds.com/"}'
    ```
 
    Take the `jobId` from the response and stream it:
 
    ```bash
-   curl -N -H "Authorization: Bearer <token>" https://worker.<your-domain>/audit/<jobId>/stream
+   curl -N -H "Authorization: Bearer <token>" https://cro-worker.monkeyman.agency/audit/<jobId>/stream
    ```
 
    You should see `shot` events for each page, a `checks` event, then `done` with `"partial":false`.
@@ -203,9 +207,10 @@ HTTPS (Caddy), the token check and the health-restart cron cost nothing. Data tr
 | Symptom | Likely cause | Fix |
 |---|---|---|
 | `/health` returns 503 | Chromium cannot start: version mismatch, or out of memory | `docker logs cro-worker`. Confirm `PLAYWRIGHT_VERSION` equals `playwright-core`. Check swap is on (`free -h`) |
+| Every report says part of the visit did not finish ("still loading" or "did not load in time") | Not enough CPU for the page loads within the deadline | Set `PAGE_CONCURRENCY=2`, `AUDIT_DEADLINE_MS=90000`, `NAV_TIMEOUT_MS=30000`, `WRITE_DEADLINE_MS=110000`. Check the Lightsail CPU graph: if it sits in the burstable zone, burst capacity is used up; step up a plan |
 | Report says "We could not open … in our browser" | No page rendered in time | Check the logs for navigation timeouts. Raise `NAV_TIMEOUT_MS`. On `t3` instances, check CPU credits are not exhausted |
 | Every audit fails to start; worker log shows 401 | `WORKER_TOKEN` differs between Vercel and the server | Set the same value in both; redeploy the web app |
-| Every audit fails with "fetch failed" | `WORKER_URL` missing on Vercel, or DNS/HTTPS not ready | Set it; check `curl https://worker.<your-domain>/health` |
+| Every audit fails with "fetch failed" | `WORKER_URL` missing on Vercel, or DNS/HTTPS not ready | Set it; check `curl https://cro-worker.monkeyman.agency/health` |
 | Audits hang, then fail at 150 s | The proxy buffers the stream | Caddy: `flush_interval -1`. nginx: `proxy_buffering off; proxy_read_timeout 120s;` |
 | Audits wait a long time before starting | The queue is full at `MAX_CONCURRENT_AUDITS=1` | Step up one size and raise it to 2 |
 | Screenshots show a challenge page ("Verify you are human") | The store's CDN challenges data-centre IPs | Not detected yet. Consider a residential or ISP proxy for egress |

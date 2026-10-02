@@ -118,7 +118,7 @@ export class BrowserPool {
 
     const ctx = await browser.newContext({
       viewport: isMobile ? { ...MOBILE_VIEWPORT } : { ...DESKTOP_VIEWPORT },
-      deviceScaleFactor: isMobile ? 3 : 1,
+      deviceScaleFactor: isMobile ? config.mobileScale : 1,
       isMobile,
       hasTouch: isMobile,
       userAgent: isMobile ? MOBILE_UA : DESKTOP_UA,

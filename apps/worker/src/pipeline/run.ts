@@ -112,28 +112,42 @@ export async function runAudit(url: string, emit: Emit, productUrl?: string): Pr
     const product = targets.find((t) => t.role === 'product');
     if (product) loads.push({ url: product.url, role: 'product', viewport: 'mobile', screenshot: false, probeOnly: true });
 
-    const allLoads: PageEvidence[] = await Promise.all(
-      loads.map((t) =>
-        collectPage({ ...t, signal }).then((page) => {
-          // Push each screenshot the moment its page finishes rather than
-          // waiting for the slowest of the four.
-          if (page.screenshot) {
-            emit({
-              type: 'shot',
-              role: page.role,
-              viewport: page.viewport,
-              url: page.finalUrl,
-              dataUri: page.screenshot,
-              at: at(),
-            });
-          }
-          if (page.sectionShots?.length) {
-            emit({ type: 'sections', role: page.role, url: page.finalUrl, shots: page.sectionShots, at: at() });
-          }
-          return page;
-        }),
-      ),
-    );
+    // On a small server, all five loads at once starve each other of CPU and
+    // every page times out. PAGE_CONCURRENCY caps how many run together, and
+    // the most important pages go first so a deadline cuts the least useful.
+    const rank = (l: typeof loads[number]) =>
+      l.role === 'product' && !l.probeOnly ? 0 : l.role === 'home' && l.viewport === 'mobile' ? 1 : l.probeOnly ? 2 : l.role === 'home' ? 4 : 3;
+    const order = loads.map((_, i) => i).sort((a, b) => rank(loads[a]!) - rank(loads[b]!));
+    const lanes = Math.min(config.pageConcurrency > 0 ? config.pageConcurrency : loads.length, loads.length);
+    const allLoads: PageEvidence[] = new Array(loads.length);
+    let nextLoad = 0;
+    await Promise.all(Array.from({ length: lanes }, async () => {
+      while (nextLoad < order.length) {
+        const i = order[nextLoad++]!;
+        allLoads[i] = await loadOne(loads[i]!);
+      }
+    }));
+
+    function loadOne(t: typeof loads[number]): Promise<PageEvidence> {
+      return collectPage({ ...t, signal }).then((page) => {
+        // Push each screenshot the moment its page finishes rather than
+        // waiting for the slowest of the four.
+        if (page.screenshot) {
+          emit({
+            type: 'shot',
+            role: page.role,
+            viewport: page.viewport,
+            url: page.finalUrl,
+            dataUri: page.screenshot,
+            at: at(),
+          });
+        }
+        if (page.sectionShots?.length) {
+          emit({ type: 'sections', role: page.role, url: page.finalUrl, shots: page.sectionShots, at: at() });
+        }
+        return page;
+      });
+    }
 
     // Fold the probe's result into the measured product page; the probe load
     // itself is not a page the rules should score.

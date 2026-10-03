@@ -104,7 +104,35 @@ let zohoToken: { value: string; expires: number } | null = null;
 function zohoConfig() {
   const { ZOHO_ACCOUNTS_URL, ZOHO_API_URL, ZOHO_CLIENT_ID, ZOHO_CLIENT_SECRET, ZOHO_REFRESH_TOKEN } = process.env;
   if (!ZOHO_ACCOUNTS_URL || !ZOHO_API_URL || !ZOHO_CLIENT_ID || !ZOHO_CLIENT_SECRET || !ZOHO_REFRESH_TOKEN) return null;
-  return { accounts: ZOHO_ACCOUNTS_URL.replace(/\/+$/, ''), api: ZOHO_API_URL.replace(/\/+$/, ''), clientId: ZOHO_CLIENT_ID, clientSecret: ZOHO_CLIENT_SECRET, refreshToken: ZOHO_REFRESH_TOKEN };
+  return {
+    accounts: ZOHO_ACCOUNTS_URL.replace(/\/+$/, ''), api: ZOHO_API_URL.replace(/\/+$/, ''),
+    clientId: ZOHO_CLIENT_ID, clientSecret: ZOHO_CLIENT_SECRET, refreshToken: ZOHO_REFRESH_TOKEN,
+    /** API name of the target module: `Leads`, or a custom one such as `Monkeyman_Paid_Leads`. */
+    module: process.env.ZOHO_MODULE?.trim() || 'Leads',
+  };
+}
+
+let zohoFieldCache: { module: string; names: Set<string> } | null = null;
+
+/** Field API names of the target module, or null when they cannot be read. */
+async function zohoFields(cfg: NonNullable<ReturnType<typeof zohoConfig>>, token: string): Promise<Set<string> | null> {
+  if (zohoFieldCache?.module === cfg.module) return zohoFieldCache.names;
+  try {
+    const res = await fetch(`${cfg.api}/crm/v8/settings/fields?module=${encodeURIComponent(cfg.module)}`, {
+      headers: { Authorization: `Zoho-oauthtoken ${token}` },
+      signal: AbortSignal.timeout(TIMEOUT_MS),
+    });
+    const json = (await res.json().catch(() => ({}))) as { fields?: { api_name?: string }[] };
+    if (!res.ok || !json.fields) {
+      console.error('[lead-sync] Zoho field list failed:', res.status, '- sending all fields');
+      return null;
+    }
+    zohoFieldCache = { module: cfg.module, names: new Set(json.fields.map((f) => f.api_name).filter((n): n is string => !!n)) };
+    return zohoFieldCache.names;
+  } catch (error) {
+    console.error('[lead-sync] Zoho field list failed:', error instanceof Error ? error.message : error);
+    return null;
+  }
 }
 
 async function zohoAccessToken(cfg: NonNullable<ReturnType<typeof zohoConfig>>): Promise<string | null> {
@@ -145,6 +173,7 @@ async function pushToZoho(lead: LeadRecord): Promise<string | null> {
       `Source: ${lead.source === 'landing' ? 'Landing page form' : 'Report unlock form'}`,
       `Strategy session requested: ${lead.strategySession === true ? 'Yes' : lead.strategySession === false ? 'No' : '-'}`,
       contactOk ? null : 'Do not contact for sales: the shopper only unlocked their report and declined a strategy session.',
+      `Store: ${lead.storeUrl}`,
       `Needs: ${label(lead.intent)}`,
       `Monthly sales: ${label(lead.gmv)}`,
       `Budget: ${label(lead.budget)}`,
@@ -153,20 +182,33 @@ async function pushToZoho(lead: LeadRecord): Promise<string | null> {
       lead.reportId && site ? `Report: ${site}/reports/${lead.reportId}` : null,
       `Lead id: ${lead.id}`,
     ].filter(Boolean).join('\n');
-    const record = {
-      First_Name: parts.length ? parts.join(' ') : undefined,
-      Last_Name: lastName,
+    // The standard Leads module needs Last_Name and Company; a custom module
+    // (e.g. "Monkeyman Paid Leads") names its record with `Name` instead.
+    const standard = cfg.module === 'Leads';
+    const record: Record<string, string | undefined> = {
+      ...(standard
+        ? { First_Name: parts.length ? parts.join(' ') : undefined, Last_Name: lastName, Company: company }
+        : { Name: lead.name }),
       Email: lead.email,
       Phone: lead.phone || undefined,
-      Company: company,
       Website: lead.storeUrl,
       Lead_Source: process.env.ZOHO_LEAD_SOURCE || 'CRO Audit',
       Description: description,
     };
-    const res = await fetch(`${cfg.api}/crm/v8/Leads/upsert`, {
+    // Only send fields the module has: a custom module may lack Phone,
+    // Website or Lead_Source, and Zoho rejects unknown or invalid values.
+    const known = await zohoFields(cfg, token);
+    if (known) {
+      const dropped = Object.keys(record).filter((k) => record[k] !== undefined && !known.has(k));
+      for (const k of dropped) delete record[k];
+      if (dropped.length) console.warn(`[lead-sync] Zoho module ${cfg.module} has no field(s): ${dropped.join(', ')}`);
+    }
+    const res = await fetch(`${cfg.api}/crm/v8/${encodeURIComponent(cfg.module)}/upsert`, {
       method: 'POST',
       headers: { Authorization: `Zoho-oauthtoken ${token}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ data: [record], duplicate_check_fields: ['Email'] }),
+      // Leads de-duplicates on Email; a custom module uses the fields marked
+      // "Do not allow duplicate values" in its layout.
+      body: JSON.stringify(standard ? { data: [record], duplicate_check_fields: ['Email'] } : { data: [record] }),
       signal: AbortSignal.timeout(TIMEOUT_MS),
     });
     const json = (await res.json().catch(() => ({}))) as { data?: { code?: string; message?: string; details?: { id?: string } }[] };

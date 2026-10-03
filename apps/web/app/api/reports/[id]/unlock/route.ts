@@ -4,6 +4,8 @@ import { randomBytes, randomUUID } from 'node:crypto';
 import { validateReportLead } from '@/lib/lead';
 import { readReport } from '@/lib/report-store';
 import { cookieName, digest } from '@/lib/report-access';
+import { syncLead } from '@/lib/lead-sync';
+import { after } from 'next/server';
 export const runtime='nodejs';
 export async function POST(request:Request,{params}:{params:Promise<{id:string}>}){
  const origin=request.headers.get('origin'); const allowedOrigins=new Set([new URL(request.url).origin,process.env.URL,process.env.DEPLOY_PRIME_URL,process.env.SITE_URL].filter(Boolean)); if(!origin || !allowedOrigins.has(origin))return NextResponse.json({error:'Request origin is not allowed.'},{status:403});
@@ -13,7 +15,9 @@ export async function POST(request:Request,{params}:{params:Promise<{id:string}>
  catch(e){return NextResponse.json({error:e instanceof Error?e.message:'Complete all fields.'},{status:400});}
  try{
  const leadId=randomUUID(),token=randomBytes(32).toString('hex'),hash=digest(token),expiresAt=Date.now()+7*86400000;
- await savePrivateRecord('leads',leadId,{id:leadId,reportId:id,createdAt:new Date().toISOString(),...lead});
+ const createdAt=new Date().toISOString();
+ await savePrivateRecord('leads',leadId,{id:leadId,reportId:id,createdAt,...lead});
+ after(()=>syncLead({id:leadId,createdAt,source:'report_unlock',reportId:id,...lead}));
  await savePrivateRecord('grants',hash,{hash,reportId:id,leadId,expiresAt});
  const response=NextResponse.json({ok:true},{headers:{'Cache-Control':'private, no-store'}});
  response.cookies.set(cookieName(id),token,{httpOnly:true,sameSite:'strict',secure:new URL(request.url).protocol==='https:',maxAge:7*86400,path:'/'});return response;

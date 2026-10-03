@@ -1,4 +1,5 @@
 import 'server-only';
+import { staffReportLink } from './report-link';
 
 /**
  * Copies each lead to Supabase (backup) and Zoho CRM (sales follow-up).
@@ -168,6 +169,8 @@ async function pushToZoho(lead: LeadRecord): Promise<string | null> {
     let company = lead.storeUrl;
     try { company = new URL(lead.storeUrl).hostname.replace(/^www\./, ''); } catch { /* keep the URL */ }
     const site = process.env.SITE_URL?.replace(/\/+$/, '');
+    // A staff link opens the report without the unlock form; fall back to the plain page.
+    const reportLink = lead.reportId ? staffReportLink(lead.reportId) ?? (site ? `${site}/reports/${lead.reportId}` : null) : null;
     const contactOk = lead.source === 'landing' || lead.strategySession === true;
     const description = [
       `Source: ${lead.source === 'landing' ? 'Landing page form' : 'Report unlock form'}`,
@@ -179,7 +182,7 @@ async function pushToZoho(lead: LeadRecord): Promise<string | null> {
       `Budget: ${label(lead.budget)}`,
       `Timing: ${label(lead.urgency)}`,
       lead.route ? `Routing: ${lead.route}` : null,
-      lead.reportId && site ? `Report: ${site}/reports/${lead.reportId}` : null,
+      reportLink ? `Report: ${reportLink}` : null,
       `Lead id: ${lead.id}`,
     ].filter(Boolean).join('\n');
     // The standard Leads module needs Last_Name and Company; a custom module
@@ -220,9 +223,33 @@ async function pushToZoho(lead: LeadRecord): Promise<string | null> {
       console.error('[lead-sync] Zoho upsert failed:', res.status, result?.code ?? '', result?.message ?? '');
       return null;
     }
+    if (reportLink) await addZohoNote(cfg, token, result.details.id, lead, reportLink);
     return result.details.id;
   } catch (error) {
     console.error('[lead-sync] Zoho upsert failed:', error instanceof Error ? error.message : error);
     return null;
+  }
+}
+
+/** Adds the audit report link as a note, so each audit shows in the record's Notes. */
+async function addZohoNote(cfg: NonNullable<ReturnType<typeof zohoConfig>>, token: string, recordId: string, lead: LeadRecord, reportLink: string) {
+  let store = lead.storeUrl;
+  try { store = new URL(lead.storeUrl).hostname.replace(/^www\./, ''); } catch { /* keep the URL */ }
+  const content = [
+    `Audit report for ${store}: ${reportLink}`,
+    `Strategy session requested: ${lead.strategySession === true ? 'Yes' : lead.strategySession === false ? 'No' : '-'}`,
+    `Unlocked: ${lead.createdAt}`,
+  ].join('\n');
+  try {
+    const res = await fetch(`${cfg.api}/crm/v8/${encodeURIComponent(cfg.module)}/${encodeURIComponent(recordId)}/Notes`, {
+      method: 'POST',
+      headers: { Authorization: `Zoho-oauthtoken ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ data: [{ Note_Title: `CRO audit report: ${store}`, Note_Content: content }] }),
+      signal: AbortSignal.timeout(TIMEOUT_MS),
+    });
+    const json = (await res.json().catch(() => ({}))) as { data?: { code?: string; message?: string }[] };
+    if (!res.ok || json.data?.[0]?.code !== 'SUCCESS') console.error('[lead-sync] Zoho note failed:', res.status, json.data?.[0]?.code ?? '', json.data?.[0]?.message ?? '');
+  } catch (error) {
+    console.error('[lead-sync] Zoho note failed:', error instanceof Error ? error.message : error);
   }
 }

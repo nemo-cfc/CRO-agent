@@ -107,7 +107,7 @@ function zohoConfig() {
   return {
     accounts: ZOHO_ACCOUNTS_URL.replace(/\/+$/, ''), api: ZOHO_API_URL.replace(/\/+$/, ''),
     clientId: ZOHO_CLIENT_ID, clientSecret: ZOHO_CLIENT_SECRET, refreshToken: ZOHO_REFRESH_TOKEN,
-    /** API name of the target module: `Leads`, or a custom one such as `Monkeyman_Paid_Leads`. */
+    /** API name of the target module: `Leads`, or a custom one such as `monkeyman_paid_leads`. */
     module: process.env.ZOHO_MODULE?.trim() || 'Leads',
   };
 }

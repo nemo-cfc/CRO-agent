@@ -197,7 +197,10 @@ async function pushToZoho(lead: LeadRecord): Promise<string | null> {
     };
     // Only send fields the module has: a custom module may lack Phone,
     // Website or Lead_Source, and Zoho rejects unknown or invalid values.
-    const known = await zohoFields(cfg, token);
+    // ZOHO_FIELDS lists the module's fields by hand, for a token that is not
+    // allowed to read field metadata (ZohoCRM.settings.fields.READ).
+    const listed = process.env.ZOHO_FIELDS?.split(',').map((f) => f.trim()).filter(Boolean);
+    const known = listed?.length ? new Set(listed) : await zohoFields(cfg, token);
     if (known) {
       const dropped = Object.keys(record).filter((k) => record[k] !== undefined && !known.has(k));
       for (const k of dropped) delete record[k];

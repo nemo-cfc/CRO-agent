@@ -4,7 +4,8 @@ import { staffReportLink } from './report-link';
 /**
  * Copies each lead to Supabase (backup) and Zoho CRM (sales follow-up).
  *
- * Vercel Blob stays the primary store: these run after the response, and a
+ * The app's own lead store (Vercel Blob, or files on the server's disk) stays
+ * primary: these run after the response, and a
  * failure here is logged, never shown to the shopper. Each target is skipped
  * when its environment variables are not set.
  */

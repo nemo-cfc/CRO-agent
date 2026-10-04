@@ -17,7 +17,7 @@ export async function POST(request:Request) {
   const route=lead.gmv==='100k-plus'||lead.intent==='plus'?'priority':lead.gmv==='under-5k'||lead.budget==='exploring'?'nurture':'standard';
   const createdAt=new Date().toISOString();
   await savePrivateRecord('leads',id,{id,createdAt,magnet:'cro',route,...lead});
-  // Backup and CRM copies run after the response; Blob above is the record of truth.
+  // Backup and CRM copies run after the response; the record saved above is primary.
   after(()=>syncLead({id,createdAt,source:'landing',route,...lead}));
   return Response.json({id,url:lead.storeUrl},{status:201,headers:{'Cache-Control':'no-store'}});
  } catch { return Response.json({error:'We could not save your details. Please try again.'},{status:500}); }
